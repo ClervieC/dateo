@@ -12,6 +12,8 @@ type Badge = {
   label: string
   desc: string
   unlocked: boolean
+  current?: number
+  target?: number
 }
 
 function computeBadges(
@@ -25,20 +27,20 @@ function computeBadges(
   planifieCount: number,
 ): Badge[] {
   return [
-    { id: 'first', emoji: '🌹', label: 'Premier Date', desc: 'Enregistre ton premier date', unlocked: count >= 1 },
-    { id: 'ten', emoji: '🔥', label: 'Enflammé', desc: '10 dates vécus', unlocked: count >= 10 },
-    { id: 'twenty', emoji: '💫', label: 'Romantique', desc: '20 dates vécus', unlocked: count >= 20 },
-    { id: 'fifty', emoji: '👑', label: 'Expert des dates', desc: '50 dates vécus', unlocked: count >= 50 },
-    { id: 'excellent', emoji: '✨', label: 'Excellent', desc: 'Avoir un 18/20 ou plus', unlocked: maxNote >= 18 },
-    { id: 'perfect', emoji: '⭐', label: 'Note parfaite', desc: 'Avoir un 20/20', unlocked: maxNote >= 20 },
-    { id: 'explorer', emoji: '🗺️', label: 'Explorateur', desc: 'Visiter 5 lieux différents', unlocked: distinctLieux >= 5 },
-    { id: 'nomad', emoji: '🌍', label: 'Nomade', desc: 'Visiter 15 lieux différents', unlocked: distinctLieux >= 15 },
-    { id: 'conseil', emoji: '💖', label: 'Recommandeur', desc: 'Conseiller vivement 3 dates', unlocked: conseilCount >= 3 },
-    { id: 'writer', emoji: '✍️', label: 'Commentateur', desc: 'Laisser 5 commentaires sur des dates', unlocked: commentCount >= 5 },
+    { id: 'first', emoji: '🌹', label: 'Premier Date', desc: 'Enregistre ton premier date', unlocked: count >= 1, current: count, target: 1 },
+    { id: 'ten', emoji: '🔥', label: 'Enflammé', desc: '10 dates vécus', unlocked: count >= 10, current: count, target: 10 },
+    { id: 'twenty', emoji: '💫', label: 'Romantique', desc: '20 dates vécus', unlocked: count >= 20, current: count, target: 20 },
+    { id: 'fifty', emoji: '👑', label: 'Expert des dates', desc: '50 dates vécus', unlocked: count >= 50, current: count, target: 50 },
+    { id: 'excellent', emoji: '✨', label: 'Excellent', desc: 'Avoir un 18/20 ou plus', unlocked: maxNote >= 18, current: maxNote, target: 18 },
+    { id: 'perfect', emoji: '⭐', label: 'Note parfaite', desc: 'Avoir un 20/20', unlocked: maxNote >= 20, current: maxNote, target: 20 },
+    { id: 'explorer', emoji: '🗺️', label: 'Explorateur', desc: 'Visiter 5 lieux différents', unlocked: distinctLieux >= 5, current: distinctLieux, target: 5 },
+    { id: 'nomad', emoji: '🌍', label: 'Nomade', desc: 'Visiter 15 lieux différents', unlocked: distinctLieux >= 15, current: distinctLieux, target: 15 },
+    { id: 'conseil', emoji: '💖', label: 'Recommandeur', desc: 'Conseiller vivement 3 dates', unlocked: conseilCount >= 3, current: conseilCount, target: 3 },
+    { id: 'writer', emoji: '✍️', label: 'Commentateur', desc: 'Laisser 5 commentaires sur des dates', unlocked: commentCount >= 5, current: commentCount, target: 5 },
     { id: 'couple', emoji: '💑', label: 'Duo', desc: 'Lier son compte en mode couple', unlocked: hasCouple },
-    { id: 'streak3', emoji: '📅', label: 'Assidu', desc: 'Dates 3 mois consécutifs', unlocked: monthStreak >= 3 },
-    { id: 'streak6', emoji: '🗓️', label: 'Régulier', desc: 'Dates 6 mois consécutifs', unlocked: monthStreak >= 6 },
-    { id: 'planner', emoji: '📌', label: 'Planificateur', desc: 'Avoir 3 dates planifiés', unlocked: planifieCount >= 3 },
+    { id: 'streak3', emoji: '📅', label: 'Assidu', desc: 'Dates 3 mois consécutifs', unlocked: monthStreak >= 3, current: monthStreak, target: 3 },
+    { id: 'streak6', emoji: '🗓️', label: 'Régulier', desc: 'Dates 6 mois consécutifs', unlocked: monthStreak >= 6, current: monthStreak, target: 6 },
+    { id: 'planner', emoji: '📌', label: 'Planificateur', desc: 'Avoir 3 dates planifiés', unlocked: planifieCount >= 3, current: planifieCount, target: 3 },
   ]
 }
 
@@ -142,6 +144,14 @@ export default function Badges() {
                     <Text style={styles.badgeEmoji}>{b.emoji}</Text>
                     <Text style={[styles.badgeLabel, styles.badgeLabelLocked]}>{b.label}</Text>
                     <Text style={styles.badgeDesc}>{b.desc}</Text>
+                    {b.target !== undefined && (
+                      <>
+                        <View style={styles.badgeProgressTrack}>
+                          <View style={[styles.badgeProgressFill, { width: `${Math.min(100, ((b.current ?? 0) / b.target) * 100)}%` }]} />
+                        </View>
+                        <Text style={styles.badgeProgressText}>{Math.min(b.current ?? 0, b.target)}/{b.target}</Text>
+                      </>
+                    )}
                   </View>
                 ))}
               </View>
@@ -169,4 +179,7 @@ const styles = StyleSheet.create({
   badgeLabel: { fontSize: 13, fontWeight: '700', color: '#5C4A45', textAlign: 'center' },
   badgeLabelLocked: { color: '#aaa' },
   badgeDesc: { fontSize: 11, color: '#888', textAlign: 'center', marginTop: 4, lineHeight: 15 },
+  badgeProgressTrack: { width: '100%', height: 4, borderRadius: 2, backgroundColor: '#E8DCD8', marginTop: 8, overflow: 'hidden' },
+  badgeProgressFill: { height: 4, borderRadius: 2, backgroundColor: '#D4517E' },
+  badgeProgressText: { fontSize: 10, color: '#B8A9A0', marginTop: 3, fontWeight: '600' },
 })

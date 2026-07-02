@@ -117,6 +117,13 @@ export default function Recap() {
     }
   }
 
+  function goBack() {
+    if (slide === 0) return
+    const prev = slide - 1
+    listRef.current?.scrollToIndex({ index: prev, animated: true })
+    setSlide(prev)
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: '#D4517E' }]} edges={['top']}>
@@ -151,10 +158,13 @@ export default function Recap() {
         data={slides}
         horizontal
         pagingEnabled
-        scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(_, i) => String(i)}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        onMomentumScrollEnd={(e) => {
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / width)
+          setSlide(newIndex)
+        }}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width, backgroundColor: item.bg }]}>
             <View style={styles.slideContent}>
@@ -176,11 +186,18 @@ export default function Recap() {
             <View key={i} style={[styles.dot, { backgroundColor: slides[slide]?.textColor ?? '#fff', opacity: i === slide ? 1 : 0.3 }]} />
           ))}
         </View>
-        <TouchableOpacity style={[styles.nextBtn, { borderColor: slides[slide]?.textColor ?? '#fff' }]} onPress={goNext}>
-          <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>
-            {slide === slides.length - 1 ? 'Fermer' : 'Suivant →'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.footerBtnRow}>
+          {slide > 0 && (
+            <TouchableOpacity style={[styles.nextBtn, styles.backBtn, { borderColor: slides[slide]?.textColor ?? '#fff' }]} onPress={goBack}>
+              <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>← Précédent</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.nextBtn, { flex: 1, borderColor: slides[slide]?.textColor ?? '#fff' }]} onPress={goNext}>
+            <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>
+              {slide === slides.length - 1 ? 'Fermer' : 'Suivant →'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   )
@@ -200,7 +217,9 @@ const styles = StyleSheet.create({
   footer: { paddingBottom: 40, paddingHorizontal: 24 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 16 },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  footerBtnRow: { flexDirection: 'row', gap: 10 },
   nextBtn: { borderRadius: 16, borderWidth: 1.5, padding: 16, alignItems: 'center' },
+  backBtn: { paddingHorizontal: 20 },
   nextBtnText: { fontWeight: '700', fontSize: 16 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyEmoji: { fontSize: 56, marginBottom: 16 },

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
-import { View, Text, FlatList, StyleSheet, Image, ScrollView, ActivityIndicator, TouchableOpacity, Animated, TextInput } from 'react-native'
+import { View, Text, FlatList, StyleSheet, Image, ScrollView, ActivityIndicator, TouchableOpacity, Animated, TextInput, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -31,11 +31,13 @@ type FeedItem = {
   reactionCount: number
   myReaction: boolean
   commentCount: number
+  participants: string[]
 }
 
 export default function Feed() {
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -113,7 +115,7 @@ export default function Feed() {
 
     const { data, error } = await supabase
       .from('dates')
-      .select('id, intitule, lieu, date_du_date, note_globale, commentaire, user_id, conseil_vivement, statut, categorie, visibilite, profiles(username, avatar_url), date_photos(photo_url, ordre)')
+      .select('id, intitule, lieu, date_du_date, note_globale, commentaire, user_id, conseil_vivement, statut, categorie, visibilite, profiles(username, avatar_url), date_photos(photo_url, ordre), date_participants(profiles(username))')
       .in('user_id', allowedIds)
       .eq('statut', 'vecu')
       .or(`user_id.eq.${userId}${partnerIdRef.current ? `,user_id.eq.${partnerIdRef.current}` : ''},visibilite.eq.friends,visibilite.is.null`)
@@ -121,7 +123,8 @@ export default function Feed() {
       .order('created_at', { ascending: false })
       .range(from, to)
 
-    if (error || !data) return []
+    if (error) { setLoadError(true); return [] }
+    if (!data) return []
 
     const raw = data.map((d: any) => ({
       id: d.id,
@@ -140,6 +143,7 @@ export default function Feed() {
       photos: (d.date_photos ?? [])
         .sort((a: any, b: any) => a.ordre - b.ordre)
         .map((p: any) => p.photo_url),
+      participants: (d.date_participants ?? []).map((p: any) => p.profiles?.username).filter(Boolean),
     }))
 
     return enrichWithCounts(raw, userId)
@@ -147,6 +151,7 @@ export default function Feed() {
 
   const loadFeed = useCallback(async () => {
     setLoading(true)
+    setLoadError(false)
     setHasMore(true)
     pageRef.current = 0
 
@@ -287,10 +292,21 @@ export default function Feed() {
           <View>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Feed</Text>
-              <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
-                <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
+                  <Ionicons name="notifications-outline" size={22} color="#D4517E" />
+                </TouchableOpacity>
+              )}
             </View>
+
+            {loadError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>Impossible de charger le feed. Vérifie ta connexion.</Text>
+                <TouchableOpacity onPress={loadFeed}>
+                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {anniversaries.length > 0 && (
               <TouchableOpacity
@@ -393,6 +409,10 @@ export default function Feed() {
                 </View>
               )}
             </View>
+
+            {item.participants.length > 0 && (
+              <Text style={styles.participants}>👥 Avec {item.participants.map((u) => `@${u}`).join(', ')}</Text>
+            )}
 
             {item.photos.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
@@ -498,6 +518,9 @@ const styles = StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#F0D9D9', gap: 8, marginBottom: 10 },
   searchInput: { flex: 1, fontSize: 14, color: '#5C4A45', padding: 0 },
   catFilterRow: { marginBottom: 16, flexGrow: 0, minWidth: 0 },
+  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
   catFilter: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
   catFilterActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
   catFilterText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
@@ -528,6 +551,7 @@ const styles = StyleSheet.create({
   commentCount: { fontSize: 13, color: '#B8A9A0', fontWeight: '600' },
   dateMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   catChip: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  participants: { fontSize: 12, color: '#5C4A45', marginTop: 4 },
   catChipText: { fontSize: 11, color: '#D4517E', fontWeight: '600' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 12 },

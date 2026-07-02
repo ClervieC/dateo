@@ -28,9 +28,20 @@ export function clamperNote(note: number, max: number): number {
   return Math.max(0, Math.min(max, Math.round(note)))
 }
 
+// Affiche une note issue d'un slider (step 0.25) sans artefacts flottants (ex: 3.2500000000000004)
+// et sans zéros inutiles (3 au lieu de 3.00, 3.5 au lieu de 3.50).
+export function formatNote(note: number): string {
+  return Number(note).toFixed(2).replace(/\.?0+$/, '')
+}
+
 export function todayFr(): string {
   const d = new Date()
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+export function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function parseDateFr(input: string): string | null {

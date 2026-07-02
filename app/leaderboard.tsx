@@ -68,6 +68,9 @@ export default function Leaderboard() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  const ranked = entries.filter((e) => e.count > 0)
+  const unranked = entries.filter((e) => e.count === 0)
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
@@ -84,16 +87,43 @@ export default function Leaderboard() {
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
-          data={entries}
+          data={ranked}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <Text style={styles.subtitle}>Classement par moyenne des dates vécus</Text>
           }
+          ListFooterComponent={
+            unranked.length > 0 ? (
+              <View>
+                <Text style={styles.unrankedTitle}>Pas encore classés</Text>
+                {unranked.map((item) => (
+                  <View key={item.id} style={[styles.row, styles.rowUnranked, item.isMe && styles.rowMe]}>
+                    <Text style={styles.rank}>—</Text>
+                    {item.avatar_url ? (
+                      <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitial}>{item.username.charAt(0).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={styles.info}>
+                      <Text style={[styles.username, item.isMe && styles.usernameMe]}>
+                        @{item.username}{item.isMe ? ' (toi)' : ''}
+                      </Text>
+                      <Text style={styles.meta}>Aucun date vécu pour l'instant</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>🏆</Text>
-              <Text style={styles.emptyText}>Ajoute des amis pour voir le classement</Text>
-            </View>
+            unranked.length === 0 ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyIcon}>🏆</Text>
+                <Text style={styles.emptyText}>Ajoute des amis pour voir le classement</Text>
+              </View>
+            ) : null
           }
           renderItem={({ item, index }) => (
             <View style={[styles.row, item.isMe && styles.rowMe]}>
@@ -111,7 +141,7 @@ export default function Leaderboard() {
                 </Text>
                 <Text style={styles.meta}>{item.count} date{item.count !== 1 ? 's' : ''} vécus</Text>
               </View>
-              <Text style={styles.score}>{item.count > 0 ? item.moyenne.toFixed(1) : '—'}/20</Text>
+              <Text style={styles.score}>{item.moyenne.toFixed(1)}/20</Text>
             </View>
           )}
         />
@@ -130,6 +160,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
   rowMe: { borderColor: '#D4517E', borderWidth: 1.5, backgroundColor: '#FFF4F7' },
+  rowUnranked: { opacity: 0.6 },
+  unrankedTitle: { fontSize: 13, fontWeight: '700', color: '#B8A9A0', marginTop: 8, marginBottom: 10 },
   rank: { fontSize: 22, width: 36, textAlign: 'center' },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0D9D9' },
   avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },

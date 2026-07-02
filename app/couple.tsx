@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
+import { todayIso, formaterDate } from '../lib/dateUtils'
+import { DatePicker } from '../lib/DatePicker'
 
 type CoupleRow = {
   id: string
@@ -13,6 +15,7 @@ type CoupleRow = {
   partnerUsername: string
   partnerAvatar: string | null
   partnerId: string
+  dateDebut: string | null
 }
 
 type CoupleStats = {
@@ -33,6 +36,11 @@ export default function Couple() {
   const [actionMsg, setActionMsg] = useState('')
   const [actioning, setActioning] = useState(false)
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [confirmDecline, setConfirmDecline] = useState(false)
+  const [dateDebutIso, setDateDebutIso] = useState(todayIso())
+  const [dateDebutError, setDateDebutError] = useState('')
+  const [editingDateDebut, setEditingDateDebut] = useState(false)
+  const [savingDateDebut, setSavingDateDebut] = useState(false)
   const router = useRouter()
 
   const loadCouple = useCallback(async () => {
@@ -42,7 +50,7 @@ export default function Couple() {
 
     const { data } = await supabase
       .from('couples')
-      .select('id, user1_id, user2_id, status')
+      .select('id, user1_id, user2_id, status, date_debut')
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
       .maybeSingle()
 
@@ -64,6 +72,7 @@ export default function Couple() {
       partnerUsername: profile?.username ?? '?',
       partnerAvatar: profile?.avatar_url ?? null,
       partnerId,
+      dateDebut: (data as any).date_debut ?? null,
     })
 
     if (data.status === 'accepted') {
@@ -103,17 +112,57 @@ export default function Couple() {
     } else {
       setSearchMsg('')
       setSearchUsername('')
+      sendCoupleInviteNotification(profile.id)
       await loadCouple()
+    }
+  }
+
+  async function sendCoupleInviteNotification(recipientId: string, type: 'invite' | 'accepted' = 'invite') {
+    try {
+      const [{ data: sender }, { data: recipient }] = await Promise.all([
+        supabase.from('profiles').select('username').eq('id', myId).single(),
+        supabase.from('profiles').select('expo_push_token').eq('id', recipientId).single(),
+      ])
+
+      const token = recipient?.expo_push_token
+      if (!token) return
+
+      const senderName = sender?.username ?? 'Quelqu\'un'
+      const title = type === 'invite' ? '💑 Invitation en mode couple' : '💑 Invitation acceptée'
+      const body = type === 'invite'
+        ? `${senderName} veut lier son compte au tien sur Dateo`
+        : `${senderName} a accepté ton invitation en mode couple`
+
+      await fetch('https://exp.host/push/send', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: token, title, body, data: { screen: 'couple' } }),
+      })
+    } catch {
+      // Notification silencieusement ignorée si l'utilisateur n'a pas de token
     }
   }
 
   async function acceptInvite() {
     if (!couple) return
+    setDateDebutError('')
     setActioning(true)
-    const { error } = await supabase.from('couples').update({ status: 'accepted' }).eq('id', couple.id)
+    const { error } = await supabase.from('couples').update({ status: 'accepted', date_debut: dateDebutIso }).eq('id', couple.id)
     setActioning(false)
+    if (!error) sendCoupleInviteNotification(couple.partnerId, 'accepted')
     if (error) setActionMsg(`Erreur : ${error.message}`)
     else await loadCouple()
+  }
+
+  async function saveDateDebut() {
+    if (!couple) return
+    setDateDebutError('')
+    setSavingDateDebut(true)
+    const { error } = await supabase.from('couples').update({ date_debut: dateDebutIso }).eq('id', couple.id)
+    setSavingDateDebut(false)
+    if (error) { setDateDebutError(error.message); return }
+    setEditingDateDebut(false)
+    await loadCouple()
   }
 
   async function declineInvite() {
@@ -122,6 +171,7 @@ export default function Couple() {
     await supabase.from('couples').delete().eq('id', couple.id)
     setActioning(false)
     setCouple(null)
+    setConfirmDecline(false)
   }
 
   async function disconnect() {
@@ -197,13 +247,28 @@ export default function Couple() {
                 <Text style={styles.partnerSub}>t'a invité(e) en mode couple</Text>
               </View>
             </View>
+            <Text style={styles.label}>Vous êtes en couple depuis le :</Text>
+            <DatePicker value={dateDebutIso} onChange={(iso) => { setDateDebutIso(iso); setDateDebutError('') }} />
+            {dateDebutError ? <Text style={styles.msgError}>{dateDebutError}</Text> : null}
             {actionMsg ? <Text style={styles.msgError}>{actionMsg}</Text> : null}
             <TouchableOpacity style={styles.btn} onPress={acceptInvite} disabled={actioning}>
               <Text style={styles.btnText}>{actioning ? '...' : '✓ Accepter'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.outlineBtn} onPress={declineInvite} disabled={actioning}>
-              <Text style={styles.outlineBtnText}>Refuser</Text>
-            </TouchableOpacity>
+            {!confirmDecline ? (
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(true)} disabled={actioning}>
+                <Text style={styles.outlineBtnText}>Refuser</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.confirmBox}>
+                <Text style={styles.confirmWarn}>Refuser cette invitation ?</Text>
+                <TouchableOpacity style={styles.confirmYes} onPress={declineInvite} disabled={actioning}>
+                  <Text style={styles.confirmYesText}>{actioning ? '...' : 'Oui, refuser'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(false)}>
+                  <Text style={styles.outlineBtnText}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -224,9 +289,21 @@ export default function Couple() {
                 <Text style={styles.partnerSub}>En attente d'acceptation…</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.outlineBtn} onPress={declineInvite}>
-              <Text style={styles.outlineBtnText}>Annuler l'invitation</Text>
-            </TouchableOpacity>
+            {!confirmDecline ? (
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(true)}>
+                <Text style={styles.outlineBtnText}>Annuler l'invitation</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.confirmBox}>
+                <Text style={styles.confirmWarn}>Annuler cette invitation ?</Text>
+                <TouchableOpacity style={styles.confirmYes} onPress={declineInvite} disabled={actioning}>
+                  <Text style={styles.confirmYesText}>{actioning ? '...' : "Oui, annuler l'invitation"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(false)}>
+                  <Text style={styles.outlineBtnText}>Retour</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -249,6 +326,28 @@ export default function Couple() {
                 <Text style={styles.partnerSub}>Les dates de votre partenaire apparaissent dans votre feed</Text>
               </View>
             </View>
+
+            {!editingDateDebut ? (
+              <TouchableOpacity style={styles.dateDebutRow} onPress={() => { setDateDebutIso(couple.dateDebut ?? todayIso()); setEditingDateDebut(true) }}>
+                <Text style={styles.dateDebutText}>
+                  {couple.dateDebut ? `💕 Ensemble depuis le ${formaterDate(couple.dateDebut)}` : '💕 Ajouter la date de mise en couple'}
+                </Text>
+                <Ionicons name="pencil" size={13} color="#D4517E" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.dateDebutEditBox}>
+                <DatePicker value={dateDebutIso} onChange={(iso) => { setDateDebutIso(iso); setDateDebutError('') }} />
+                {dateDebutError ? <Text style={styles.msgError}>{dateDebutError}</Text> : null}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={saveDateDebut} disabled={savingDateDebut}>
+                    <Text style={styles.btnText}>{savingDateDebut ? '...' : 'Enregistrer'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.outlineBtn, { flex: 1 }]} onPress={() => { setEditingDateDebut(false); setDateDebutError('') }}>
+                    <Text style={styles.outlineBtnText}>Annuler</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {coupleStats && (
               <View style={styles.statsRow}>
@@ -300,6 +399,10 @@ const styles = StyleSheet.create({
   heroSub: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
   section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
+  dateDebutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 14 },
+  dateDebutText: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
+  dateDebutEditBox: { marginBottom: 14, gap: 8 },
   input: { borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 14, marginBottom: 8, backgroundColor: '#FFF8F5' },
   btn: { backgroundColor: '#D4517E', borderRadius: 10, padding: 13, alignItems: 'center', marginBottom: 8 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },

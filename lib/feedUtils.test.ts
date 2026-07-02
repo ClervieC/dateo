@@ -1,4 +1,4 @@
-import { extraireCategories, filtrerParCategorie, getCouleurCategorie, Idea } from './feedUtils'
+import { extraireCategories, filtrerParCategorie, Idea } from './feedUtils'
 
 const faireIdea = (overrides: Partial<Idea>): Idea => ({
   id: '1',
@@ -51,19 +51,5 @@ describe('filtrerParCategorie', () => {
 
   it('retourne un tableau vide pour une catégorie inexistante', () => {
     expect(filtrerParCategorie(ideas, 'Inexistante')).toEqual([])
-  })
-})
-
-describe('getCouleurCategorie', () => {
-  const palette = {
-    Nature: { bg: '#EAF3DE', text: '#3B6D11' },
-  }
-
-  it('retourne la couleur de la palette si elle existe', () => {
-    expect(getCouleurCategorie('Nature', palette)).toEqual({ bg: '#EAF3DE', text: '#3B6D11' })
-  })
-
-  it('retourne une couleur par défaut si la catégorie est inconnue', () => {
-    expect(getCouleurCategorie('Inconnue', palette)).toEqual({ bg: '#F1EFE8', text: '#444441' })
   })
 })

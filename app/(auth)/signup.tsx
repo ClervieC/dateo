@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native'
 import { Link, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { usernameValide } from '../../lib/friendsUtils'
@@ -10,7 +10,7 @@ export default function Signup() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [checkingUsername, setCheckingUsername] = useState(false)
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
 
   async function handleSignup() {
@@ -22,15 +22,16 @@ export default function Signup() {
       return
     }
 
-    setCheckingUsername(true)
+    setSaving(true)
+
     const { data: existing } = await supabase
       .from('profiles')
       .select('id')
       .eq('username', username.trim())
       .maybeSingle()
-    setCheckingUsername(false)
 
     if (existing) {
+      setSaving(false)
       setError('Ce pseudo est déjà pris')
       return
     }
@@ -38,6 +39,7 @@ export default function Signup() {
     const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
 
     if (signUpError) {
+      setSaving(false)
       setError(signUpError.message)
       return
     }
@@ -48,10 +50,16 @@ export default function Signup() {
         .update({ username: username.trim() })
         .eq('id', data.user.id)
 
+      setSaving(false)
+
       if (profileError) {
-        setError('Compte créé mais erreur sur le pseudo : ' + profileError.message)
+        // Le compte est déjà créé : on redirige vers l'écran dédié pour retenter le pseudo
+        // plutôt que de laisser l'utilisateur bloqué sur un message d'erreur sans issue.
+        router.replace('/(auth)/username')
         return
       }
+    } else {
+      setSaving(false)
     }
 
     router.replace('/(tabs)/feed')
@@ -92,8 +100,11 @@ export default function Signup() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={checkingUsername}>
-            <Text style={styles.buttonText}>{checkingUsername ? '...' : "S'inscrire"}</Text>
+          <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={saving}>
+            {saving
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.buttonText}>S'inscrire</Text>
+            }
           </TouchableOpacity>
 
           <Link href="/(auth)/login" style={styles.link}>

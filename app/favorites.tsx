@@ -20,12 +20,15 @@ type FavItem = {
 export default function Favorites() {
   const [items, setItems] = useState<FavItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState('')
+  const [removingId, setRemovingId] = useState<string | null>(null)
   const router = useRouter()
 
   const load = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
+    setUserId(user.id)
 
     const { data } = await supabase
       .from('date_favorites')
@@ -46,6 +49,13 @@ export default function Favorites() {
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
+
+  async function removeFavorite(item: FavItem) {
+    setRemovingId(item.id)
+    await supabase.from('date_favorites').delete().eq('user_id', userId).eq('date_id', item.date_id)
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    setRemovingId(null)
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -89,7 +99,16 @@ export default function Favorites() {
                     <Text style={styles.lieu}>{item.lieu}</Text>
                   )}
                 </View>
-                <Text style={styles.note}>{item.note_globale}/20</Text>
+                <View style={styles.cardHeaderRight}>
+                  <Text style={styles.note}>{item.note_globale}/20</Text>
+                  <TouchableOpacity
+                    onPress={() => removeFavorite(item)}
+                    disabled={removingId === item.id}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="bookmark" size={20} color="#D4517E" />
+                  </TouchableOpacity>
+                </View>
               </View>
               <Text style={styles.meta}>@{item.username} · {formaterDate(item.date_du_date)}</Text>
             </TouchableOpacity>
@@ -109,6 +128,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 60 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   lieu: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
   lieuSub: { fontSize: 12, color: '#888', marginTop: 2 },
   note: { fontSize: 15, fontWeight: '700', color: '#D4517E' },

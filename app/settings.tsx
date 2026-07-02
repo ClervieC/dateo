@@ -4,11 +4,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system/legacy'
-import { decode } from 'base64-arraybuffer'
+import * as Location from 'expo-location'
 import { supabase } from '../lib/supabase'
 import { usernameValide } from '../lib/friendsUtils'
 import { webContentStyle } from '../lib/webStyles'
+import { uriToBlob } from '../lib/uploadImage'
 
 export default function Settings() {
   const [email, setEmail] = useState('')
@@ -31,8 +31,14 @@ export default function Settings() {
   const [savingGoal, setSavingGoal] = useState(false)
   const [goalMsg, setGoalMsg] = useState('')
 
+  const [ville, setVille] = useState('')
+  const [savingVille, setSavingVille] = useState(false)
+  const [villeMsg, setVilleMsg] = useState('')
+  const [locatingVille, setLocatingVille] = useState(false)
+
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [exportingCSV, setExportingCSV] = useState(false)
   const [deleteMsg, setDeleteMsg] = useState('')
 
   const router = useRouter()
@@ -43,12 +49,13 @@ export default function Settings() {
       if (!user) return
       setUserId(user.id)
       setEmail(user.email ?? '')
-      const { data } = await supabase.from('profiles').select('username, avatar_url, monthly_goal').eq('id', user.id).single()
+      const { data } = await supabase.from('profiles').select('username, avatar_url, monthly_goal, ville').eq('id', user.id).single()
       if (data) {
         setUsername(data.username)
         setNewUsername(data.username)
         setAvatarUrl(data.avatar_url ?? null)
         setMonthlyGoal(data.monthly_goal != null ? String(data.monthly_goal) : '')
+        setVille((data as any).ville ?? '')
       }
       setLoading(false)
     }
@@ -72,11 +79,11 @@ export default function Settings() {
     try {
       const fileExt = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
       const fileName = `${userId}/avatar.${fileExt}`
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' })
+      const blob = await uriToBlob(uri)
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, decode(base64), { contentType: `image/${fileExt}`, upsert: true })
+        .upload(fileName, blob, { contentType: `image/${fileExt}`, upsert: true })
 
       if (uploadError) throw uploadError
 
@@ -131,14 +138,52 @@ export default function Settings() {
     setGoalMsg('Objectif mis à jour !')
   }
 
+  async function saveVille(newVille: string) {
+    setSavingVille(true)
+    setVilleMsg('')
+    const { error } = await supabase.from('profiles').update({ ville: newVille.trim() || null }).eq('id', userId)
+    setSavingVille(false)
+    if (error) { setVilleMsg(`Erreur : ${error.message}`); return }
+    setVille(newVille.trim())
+    setVilleMsg('Ville mise à jour !')
+  }
+
+  async function useCurrentLocation() {
+    setVilleMsg('')
+    setLocatingVille(true)
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        setVilleMsg('Erreur : permission de localisation refusée')
+        return
+      }
+      const position = await Location.getCurrentPositionAsync({})
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      })
+      const detectedVille = place?.city ?? place?.subregion ?? place?.region ?? null
+      if (!detectedVille) {
+        setVilleMsg("Erreur : impossible de déterminer ta ville, entre-la manuellement")
+        return
+      }
+      await saveVille(detectedVille)
+    } catch (err) {
+      setVilleMsg(`Erreur : ${err instanceof Error ? err.message : 'localisation indisponible'}`)
+    } finally {
+      setLocatingVille(false)
+    }
+  }
+
   async function exportCSV() {
+    setExportingCSV(true)
     const { data } = await supabase
       .from('dates')
       .select('intitule, lieu, date_du_date, note_globale, commentaire, categorie, statut, conseil_vivement')
       .eq('user_id', userId)
       .order('date_du_date', { ascending: false })
 
-    if (!data) return
+    if (!data) { setExportingCSV(false); return }
 
     const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
     const headers = 'Intitulé,Lieu,Date,Note,Commentaire,Catégorie,Statut,Conseillé vivement'
@@ -154,6 +199,7 @@ export default function Settings() {
     ].join(','))
 
     await Share.share({ message: [headers, ...rows].join('\n'), title: 'Mes dates Dateo' })
+    setExportingCSV(false)
   }
 
   async function execDeleteAccount() {
@@ -193,9 +239,9 @@ export default function Settings() {
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
 
-        {/* Avatar */}
+        {/* Profil : avatar + pseudo regroupés */}
+        <Text style={styles.groupLabel}>Profil</Text>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photo de profil</Text>
           <View style={styles.avatarRow}>
             <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} disabled={uploadingAvatar}>
               {avatarUrl ? (
@@ -221,87 +267,124 @@ export default function Settings() {
               {avatarMsg}
             </Text>
           ) : null}
-        </View>
 
-        {/* Pseudo */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pseudo</Text>
-          <Text style={styles.currentValue}>Actuel : @{username}</Text>
-          <TextInput
-            style={styles.input}
-            value={newUsername}
-            onChangeText={(v) => { setNewUsername(v); setUsernameMsg('') }}
-            autoCapitalize="none"
-            placeholder="Nouveau pseudo"
-            placeholderTextColor="#B8A9A0"
-          />
+          <View style={styles.rowDivider} />
+
+          <Text style={styles.fieldLabel}>Pseudo</Text>
+          <View style={styles.fieldRow}>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              value={newUsername}
+              onChangeText={(v) => { setNewUsername(v); setUsernameMsg('') }}
+              autoCapitalize="none"
+              placeholder="Pseudo"
+              placeholderTextColor="#B8A9A0"
+            />
+            <TouchableOpacity style={styles.saveChip} onPress={handleSaveUsername} disabled={savingUsername}>
+              <Text style={styles.saveChipText}>{savingUsername ? '...' : 'OK'}</Text>
+            </TouchableOpacity>
+          </View>
           {usernameMsg ? (
             <Text style={[styles.msg, usernameMsg.startsWith('Erreur') ? styles.msgError : styles.msgSuccess]}>
               {usernameMsg}
             </Text>
           ) : null}
-          <TouchableOpacity style={styles.btn} onPress={handleSaveUsername} disabled={savingUsername}>
-            <Text style={styles.btnText}>{savingUsername ? '...' : 'Enregistrer le pseudo'}</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Mot de passe */}
+        {/* Sécurité */}
+        <Text style={styles.groupLabel}>Sécurité</Text>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mot de passe</Text>
+          <Text style={styles.fieldLabel}>Mot de passe</Text>
           <Text style={styles.hint}>Compte : {email}</Text>
-          <TextInput
-            style={styles.input}
-            value={newPassword}
-            onChangeText={(v) => { setNewPassword(v); setPasswordMsg('') }}
-            placeholder="Nouveau mot de passe"
-            placeholderTextColor="#B8A9A0"
-            secureTextEntry
-          />
+          <View style={styles.fieldRow}>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              value={newPassword}
+              onChangeText={(v) => { setNewPassword(v); setPasswordMsg('') }}
+              placeholder="Nouveau mot de passe"
+              placeholderTextColor="#B8A9A0"
+              secureTextEntry
+            />
+            <TouchableOpacity style={styles.saveChip} onPress={handleSavePassword} disabled={savingPassword}>
+              <Text style={styles.saveChipText}>{savingPassword ? '...' : 'OK'}</Text>
+            </TouchableOpacity>
+          </View>
           {passwordMsg ? (
             <Text style={[styles.msg, passwordMsg.startsWith('Erreur') ? styles.msgError : styles.msgSuccess]}>
               {passwordMsg}
             </Text>
           ) : null}
-          <TouchableOpacity style={styles.btn} onPress={handleSavePassword} disabled={savingPassword}>
-            <Text style={styles.btnText}>{savingPassword ? '...' : 'Changer le mot de passe'}</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Objectif mensuel */}
+        {/* Préférences : objectif + ville regroupés */}
+        <Text style={styles.groupLabel}>Préférences</Text>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Objectif mensuel</Text>
+          <Text style={styles.fieldLabel}>Objectif mensuel</Text>
           <Text style={styles.hint}>Nombre de dates que tu veux faire par mois</Text>
-          <TextInput
-            style={styles.input}
-            value={monthlyGoal}
-            onChangeText={(v) => { setMonthlyGoal(v.replace(/[^0-9]/g, '')); setGoalMsg('') }}
-            placeholder="Ex : 2"
-            placeholderTextColor="#B8A9A0"
-            keyboardType="number-pad"
-            maxLength={2}
-          />
+          <View style={styles.fieldRow}>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              value={monthlyGoal}
+              onChangeText={(v) => { setMonthlyGoal(v.replace(/[^0-9]/g, '')); setGoalMsg('') }}
+              placeholder="Ex : 2"
+              placeholderTextColor="#B8A9A0"
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+            <TouchableOpacity style={styles.saveChip} onPress={handleSaveGoal} disabled={savingGoal}>
+              <Text style={styles.saveChipText}>{savingGoal ? '...' : 'OK'}</Text>
+            </TouchableOpacity>
+          </View>
           {goalMsg ? (
             <Text style={[styles.msg, goalMsg.startsWith('Erreur') ? styles.msgError : styles.msgSuccess]}>
               {goalMsg}
             </Text>
           ) : null}
-          <TouchableOpacity style={styles.btn} onPress={handleSaveGoal} disabled={savingGoal}>
-            <Text style={styles.btnText}>{savingGoal ? '...' : 'Enregistrer'}</Text>
+
+          <View style={styles.rowDivider} />
+
+          <Text style={styles.fieldLabel}>📍 Ma ville</Text>
+          <Text style={styles.hint}>Utilisée pour te proposer des idées de dates près de chez toi</Text>
+          <View style={styles.fieldRow}>
+            <TextInput
+              style={[styles.input, styles.inputInline]}
+              value={ville}
+              onChangeText={(v) => { setVille(v); setVilleMsg('') }}
+              placeholder="Ex : Lyon"
+              placeholderTextColor="#B8A9A0"
+            />
+            <TouchableOpacity style={styles.saveChip} onPress={() => saveVille(ville)} disabled={savingVille}>
+              <Text style={styles.saveChipText}>{savingVille ? '...' : 'OK'}</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={useCurrentLocation} disabled={locatingVille} style={styles.locateLink}>
+            <Ionicons name="navigate-outline" size={13} color="#D4517E" />
+            <Text style={styles.locateLinkText}>
+              {locatingVille ? 'Localisation...' : 'Utiliser ma position actuelle'}
+            </Text>
+          </TouchableOpacity>
+          {villeMsg ? (
+            <Text style={[styles.msg, villeMsg.startsWith('Erreur') ? styles.msgError : styles.msgSuccess]}>
+              {villeMsg}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Données */}
+        <Text style={styles.groupLabel}>Données</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.plainRow} onPress={exportCSV} disabled={exportingCSV}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Exporter mes données</Text>
+              <Text style={styles.hint}>Télécharge tous tes dates au format CSV</Text>
+            </View>
+            {exportingCSV ? <ActivityIndicator color="#D4517E" /> : <Ionicons name="download-outline" size={20} color="#D4517E" />}
           </TouchableOpacity>
         </View>
 
-        {/* Export CSV */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Exporter mes données</Text>
-          <Text style={styles.hint}>Télécharge tous tes dates au format CSV</Text>
-          <TouchableOpacity style={styles.btn} onPress={exportCSV}>
-            <Text style={styles.btnText}>📥 Exporter en CSV</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Supprimer le compte */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Zone de danger</Text>
+        {/* Zone de danger */}
+        <Text style={styles.groupLabel}>⚠️ Zone de danger</Text>
+        <View style={[styles.section, styles.dangerZone]}>
           {deleteMsg ? <Text style={styles.msgError}>{deleteMsg}</Text> : null}
           {!confirmDelete ? (
             <TouchableOpacity style={styles.dangerBtn} onPress={() => setConfirmDelete(true)}>
@@ -340,25 +423,32 @@ const styles = StyleSheet.create({
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
   content: { padding: 20, paddingBottom: 60 },
-  section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 12 },
+  groupLabel: { fontSize: 12, fontWeight: '700', color: '#B8A9A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4, marginLeft: 4 },
+  section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9' },
+  dangerZone: { borderColor: '#F0B8A8', backgroundColor: '#FFF9F7' },
+  rowDivider: { height: 1, backgroundColor: '#F0D9D9', marginVertical: 16 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 8 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 28, fontWeight: '700', color: '#D4517E' },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F0D9D9' },
+  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 26, fontWeight: '700', color: '#D4517E' },
   avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, width: 22, height: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F0D9D9' },
   avatarEditText: { fontSize: 12 },
   avatarInfo: { flex: 1 },
   avatarName: { fontSize: 16, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
   avatarChangeBtn: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
-  currentValue: { fontSize: 13, color: '#888', marginBottom: 8 },
-  hint: { fontSize: 13, color: '#888', marginBottom: 10 },
-  input: { borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 14, marginBottom: 8, backgroundColor: '#FFF8F5' },
-  msg: { fontSize: 13, marginBottom: 8, lineHeight: 18 },
+  fieldLabel: { fontSize: 14, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
+  hint: { fontSize: 12, color: '#888', marginBottom: 10 },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  input: { borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 14, backgroundColor: '#FFF8F5' },
+  inputInline: { flex: 1 },
+  saveChip: { backgroundColor: '#D4517E', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  saveChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  locateLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  locateLinkText: { color: '#D4517E', fontWeight: '600', fontSize: 12 },
+  plainRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  msg: { fontSize: 13, marginTop: 8, lineHeight: 18 },
   msgSuccess: { color: '#3B6D11' },
-  msgError: { color: '#D85A30', marginBottom: 8 },
-  btn: { backgroundColor: '#D4517E', borderRadius: 10, padding: 13, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  msgError: { color: '#D85A30' },
   dangerBtn: { borderRadius: 10, borderWidth: 1, borderColor: '#D85A30', padding: 13, alignItems: 'center' },
   dangerBtnText: { color: '#D85A30', fontWeight: '600', fontSize: 14 },
   confirmBox: { gap: 10 },

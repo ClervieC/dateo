@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { formaterDate } from '../../lib/dateUtils'
+import { formaterDate, formatNote } from '../../lib/dateUtils'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { getCategoryLabel } from '../../lib/categories'
@@ -33,6 +33,8 @@ type DateDetail = {
   ratings: Record<string, number> | null
   categorie: string | null
   visibilite: string
+  participants: string[]
+  participantIds: string[]
 }
 
 type DateComment = {
@@ -57,6 +59,7 @@ export default function DateDetail() {
   const [sendingComment, setSendingComment] = useState(false)
   const [commentError, setCommentError] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null)
   const [partnerId, setPartnerId] = useState<string | null>(null)
   const [partnerRating, setPartnerRating] = useState<{ note_globale: number; commentaire: string | null; username: string } | null>(null)
   const [myPartnerNote, setMyPartnerNote] = useState<{ note_globale: number; commentaire: string } | null>(null)
@@ -157,7 +160,7 @@ export default function DateDetail() {
 
   async function loadDetail(dateId: string) {
     setLoading(true)
-    const [{ data: dateData }, { data: ratingsData }] = await Promise.all([
+    const [{ data: dateData }, { data: ratingsData }, { data: participantsData }] = await Promise.all([
       supabase
         .from('dates')
         .select('id, intitule, lieu, date_du_date, note_globale, commentaire, conseil_vivement, user_id, categorie, visibilite, profiles(username), date_photos(photo_url, ordre)')
@@ -167,7 +170,12 @@ export default function DateDetail() {
         .from('ratings')
         .select('mood, nourriture, ambiance, personne, conversation, prix, envie_recommencer')
         .eq('date_id', dateId)
+        .limit(1)
         .maybeSingle(),
+      supabase
+        .from('date_participants')
+        .select('user_id, profiles(username)')
+        .eq('date_id', dateId),
     ])
 
     if (dateData) {
@@ -187,6 +195,8 @@ export default function DateDetail() {
           .sort((a: any, b: any) => a.ordre - b.ordre)
           .map((p: any) => p.photo_url),
         ratings: ratingsData ?? null,
+        participants: (participantsData ?? []).map((p: any) => p.profiles?.username).filter(Boolean),
+        participantIds: (participantsData ?? []).map((p: any) => p.user_id),
       })
     }
     setLoading(false)
@@ -275,6 +285,7 @@ export default function DateDetail() {
   }
 
   async function deleteComment(commentId: string) {
+    setConfirmDeleteCommentId(null)
     setDeletingCommentId(commentId)
     await supabase.from('date_comments').delete().eq('id', commentId).eq('user_id', myId)
     setDeletingCommentId(null)
@@ -378,14 +389,18 @@ export default function DateDetail() {
               </TouchableOpacity>
             </View>
 
+            {detail.participants.length > 0 && (
+              <Text style={styles.participants}>👥 Avec {detail.participants.map((u) => `@${u}`).join(', ')}</Text>
+            )}
+
             <View style={styles.noteGlobaleBox}>
               <Text style={styles.noteGlobaleLabel}>Note globale</Text>
               <Text style={styles.noteGlobaleValue}>{detail.note_globale}<Text style={styles.noteGlobaleSuffix}>/20</Text></Text>
               {renderBar(detail.note_globale, 20)}
             </View>
 
-            {/* Note du partenaire (si c'est mon partner's date et que je veux noter) */}
-            {detail.user_id !== myId && partnerId && detail.user_id === partnerId && (
+            {/* Note du partenaire (uniquement si j'ai participé à ce date précis) */}
+            {detail.user_id !== myId && partnerId && detail.user_id === partnerId && detail.participantIds.includes(myId) && (
               <View style={styles.partnerRatingBox}>
                 <Text style={styles.partnerRatingTitle}>Mon avis sur ce date</Text>
                 {myPartnerNote && !editingPartnerNote ? (
@@ -469,7 +484,7 @@ export default function DateDetail() {
                         <Text style={styles.critereLabel}>{c.label}</Text>
                         {renderBar(val, 5)}
                       </View>
-                      <Text style={styles.critereValue}>{Number(val).toFixed(2).replace(/\.?0+$/, '')}/5</Text>
+                      <Text style={styles.critereValue}>{formatNote(val)}/5</Text>
                     </View>
                   )
                 })}
@@ -514,9 +529,9 @@ export default function DateDetail() {
                       <Text style={styles.commentUsername}>@{c.username}</Text>
                       <Text style={styles.commentTime}>{formatCommentTime(c.created_at)}</Text>
                     </View>
-                    {c.user_id === myId && (
+                    {c.user_id === myId && confirmDeleteCommentId !== c.id && (
                       <TouchableOpacity
-                        onPress={() => deleteComment(c.id)}
+                        onPress={() => setConfirmDeleteCommentId(c.id)}
                         disabled={deletingCommentId === c.id}
                       >
                         <Text style={styles.commentDelete}>{deletingCommentId === c.id ? '...' : '×'}</Text>
@@ -524,6 +539,17 @@ export default function DateDetail() {
                     )}
                   </View>
                   <Text style={styles.commentContent}>{c.content}</Text>
+                  {confirmDeleteCommentId === c.id && (
+                    <View style={styles.commentConfirmRow}>
+                      <Text style={styles.commentConfirmText}>Supprimer ce commentaire ?</Text>
+                      <TouchableOpacity onPress={() => deleteComment(c.id)}>
+                        <Text style={styles.commentConfirmYes}>Oui</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setConfirmDeleteCommentId(null)}>
+                        <Text style={styles.commentConfirmNo}>Non</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               ))}
 
@@ -547,6 +573,9 @@ export default function DateDetail() {
                   <Text style={styles.commentSendText}>{sendingComment ? '...' : '↑'}</Text>
                 </TouchableOpacity>
               </View>
+              {commentText.length > 400 && (
+                <Text style={styles.commentCharCount}>{commentText.length}/500</Text>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -583,6 +612,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 13, color: '#888' },
   catBadge: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   catBadgeText: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
+  participants: { fontSize: 13, color: '#5C4A45', marginTop: -12, marginBottom: 20 },
   noteGlobaleBox: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9', alignItems: 'center' },
   noteGlobaleLabel: { fontSize: 13, color: '#888', marginBottom: 4 },
   noteGlobaleValue: { fontSize: 52, fontWeight: '800', color: '#D4517E', lineHeight: 60 },
@@ -615,7 +645,12 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#B8A9A0' },
   commentDelete: { fontSize: 18, color: '#B8A9A0', paddingHorizontal: 4 },
   commentContent: { fontSize: 14, color: '#5C4A45', lineHeight: 20, marginLeft: 38 },
+  commentConfirmRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 38, marginTop: 6 },
+  commentConfirmText: { fontSize: 12, color: '#888', flex: 1 },
+  commentConfirmYes: { fontSize: 13, fontWeight: '700', color: '#D85A30' },
+  commentConfirmNo: { fontSize: 13, fontWeight: '600', color: '#5C4A45' },
   commentInputRow: { flexDirection: 'row', gap: 8, marginTop: 4, alignItems: 'flex-end' },
+  commentCharCount: { fontSize: 11, color: '#B8A9A0', textAlign: 'right', marginTop: 2 },
   commentInput: { flex: 1, backgroundColor: '#FFF8F5', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 14, maxHeight: 100 },
   commentSendBtn: { backgroundColor: '#D4517E', width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
   commentSendBtnDisabled: { backgroundColor: '#F0D9D9' },

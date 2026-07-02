@@ -1,14 +1,14 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Alert, Image, ScrollView, Modal, KeyboardAvoidingView, Platform, Switch, Share } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import Slider from '@react-native-community/slider'
 import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system/legacy'
-import { decode } from 'base64-arraybuffer'
+import { uriToBlob } from '../../lib/uploadImage'
 import { supabase } from '../../lib/supabase'
-import { calculerMoyenne, trouverMeilleurLieu, formaterDate, dateIsoToFr, parseDateFr } from '../../lib/dateUtils'
+import { calculerMoyenne, trouverMeilleurLieu, formaterDate } from '../../lib/dateUtils'
+import { DatePicker } from '../../lib/DatePicker'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
@@ -44,7 +44,7 @@ type EditRatings = { mood: number; nourriture: number; ambiance: number; personn
 type EditData = {
   intitule: string
   lieu: string
-  dateInput: string
+  dateIso: string
   noteGlobale: number
   commentaire: string
   conseilVivement: boolean
@@ -67,7 +67,7 @@ export default function Profile() {
   const [editData, setEditData] = useState<EditData>({
     intitule: '',
     lieu: '',
-    dateInput: '',
+    dateIso: '',
     noteGlobale: 10,
     commentaire: '',
     conseilVivement: false,
@@ -91,14 +91,19 @@ export default function Profile() {
   const [calMonth, setCalMonth] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [filterNoteMin, setFilterNoteMin] = useState(0)
-  const [filterPeriod, setFilterPeriod] = useState<'all' | 'month' | '3months' | 'year'>('all')
+  const [loadError, setLoadError] = useState(false)
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null)
+  const [companions, setCompanions] = useState<{ id: string; username: string }[]>([])
+  const [selectedCompanionIds, setSelectedCompanionIds] = useState<Set<string>>(new Set())
+  const [planifieModalVisible, setPlanifieModalVisible] = useState(false)
   const router = useRouter()
   const userIdRef = useRef('')
   const editOriginalPhotosRef = useRef<string[]>([])
+  const editOriginalParticipantIdsRef = useRef<Set<string>>(new Set())
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setLoadError(false)
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
@@ -136,6 +141,8 @@ export default function Profile() {
           .sort((a: any, b: any) => a.ordre - b.ordre)
           .map((p: any) => p.photo_url),
       })))
+    } else if (error) {
+      setLoadError(true)
     }
     setLoading(false)
   }, [])
@@ -143,13 +150,45 @@ export default function Profile() {
   useFocusEffect(useCallback(() => { loadData() }, [loadData]))
 
 
+  async function loadCompanionsList() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const [{ data: friendships }, { data: coupleRow }] = await Promise.all([
+      supabase.from('friends').select('user_id, friend_id').or(`user_id.eq.${user.id},friend_id.eq.${user.id}`).eq('status', 'accepted'),
+      supabase.from('couples').select('user1_id, user2_id').or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`).eq('status', 'accepted').maybeSingle(),
+    ])
+    const friendIds = (friendships ?? []).map((f: any) => f.user_id === user.id ? f.friend_id : f.user_id)
+    const partnerId = coupleRow ? (coupleRow.user1_id === user.id ? coupleRow.user2_id : coupleRow.user1_id) : null
+    const allIds = [...new Set([...friendIds, ...(partnerId ? [partnerId] : [])])]
+    if (allIds.length === 0) { setCompanions([]); return }
+
+    const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', allIds)
+    setCompanions((profiles ?? []) as { id: string; username: string }[])
+  }
+
+  function toggleCompanion(id: string) {
+    setSelectedCompanionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   async function openEdit(item: DateRow) {
     editOriginalPhotosRef.current = item.photos
     setEditingDate(item)
+    loadCompanionsList()
+    supabase.from('date_participants').select('user_id').eq('date_id', item.id).then(({ data }) => {
+      const ids = new Set((data ?? []).map((p: any) => p.user_id as string))
+      editOriginalParticipantIdsRef.current = ids
+      setSelectedCompanionIds(ids)
+    })
     setEditData({
       intitule: item.intitule ?? '',
       lieu: item.lieu,
-      dateInput: dateIsoToFr(item.date_du_date),
+      dateIso: item.date_du_date,
       statut: item.statut ?? 'vecu',
       noteGlobale: item.note_globale,
       commentaire: item.commentaire ?? '',
@@ -165,7 +204,7 @@ export default function Profile() {
     setLoadingEditData(true)
     const { data } = await supabase
       .from('ratings').select('mood, nourriture, ambiance, personne, conversation, prix, envie_recommencer')
-      .eq('date_id', item.id).single()
+      .eq('date_id', item.id).limit(1).maybeSingle()
     if (data) setEditData((prev) => ({
       ...prev,
       ratings: {
@@ -179,14 +218,6 @@ export default function Profile() {
       },
     }))
     setLoadingEditData(false)
-  }
-
-  function handleDateInputEdit(text: string) {
-    let cleaned = text.replace(/[^0-9]/g, '')
-    if (cleaned.length > 2) cleaned = cleaned.slice(0, 2) + '/' + cleaned.slice(2)
-    if (cleaned.length > 5) cleaned = cleaned.slice(0, 5) + '/' + cleaned.slice(5)
-    if (cleaned.length > 10) cleaned = cleaned.slice(0, 10)
-    setEditData((prev) => ({ ...prev, dateInput: cleaned }))
   }
 
   function updateEditRating(key: string, value: number) {
@@ -226,9 +257,8 @@ export default function Profile() {
   }
 
   async function handleSaveEdit() {
+    if (saving) return
     if (!editData.lieu.trim()) { Alert.alert('Oups', 'Indique le lieu du date'); return }
-    const dateIso = parseDateFr(editData.dateInput)
-    if (!dateIso) { Alert.alert('Oups', 'Date invalide — utilise le format JJ/MM/AAAA'); return }
     if (!editingDate) return
 
     setSaving(true)
@@ -243,7 +273,7 @@ export default function Profile() {
       .update({
         intitule: editData.intitule.trim() || null,
         lieu: editData.lieu.trim(),
-        date_du_date: dateIso,
+        date_du_date: editData.dateIso,
         note_globale: editData.noteGlobale,
         commentaire: editData.commentaire.trim() || null,
         statut: statutFinal,
@@ -291,6 +321,20 @@ export default function Profile() {
         .eq('date_id', editingDate.id).eq('photo_url', url)
     }
 
+    const originalParticipantIds = editOriginalParticipantIdsRef.current
+    const addedParticipantIds = [...selectedCompanionIds].filter((id) => !originalParticipantIds.has(id))
+    const removedParticipantIds = [...originalParticipantIds].filter((id) => !selectedCompanionIds.has(id))
+    if (addedParticipantIds.length > 0) {
+      await supabase.from('date_participants').upsert(
+        addedParticipantIds.map((id) => ({ date_id: editingDate.id, user_id: id })),
+        { onConflict: 'date_id,user_id', ignoreDuplicates: true }
+      )
+    }
+    for (const id of removedParticipantIds) {
+      await supabase.from('date_participants').delete()
+        .eq('date_id', editingDate.id).eq('user_id', id)
+    }
+
     setSaving(false)
 
     if (editData.newPhotoUris.length > 0) {
@@ -318,10 +362,10 @@ export default function Profile() {
         const uri = uris[i]
         const fileExt = uri.split('.').pop()?.toLowerCase() ?? 'jpg'
         const fileName = `${userId}/${batchId}_edit_${i}.${fileExt}`
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' })
+        const blob = await uriToBlob(uri)
 
         const { error: uploadError } = await supabase.storage
-          .from('date-photos').upload(fileName, decode(base64), { contentType: `image/${fileExt}` })
+          .from('date-photos').upload(fileName, blob, { contentType: `image/${fileExt}` })
         if (uploadError) throw uploadError
 
         const { data } = supabase.storage.from('date-photos').getPublicUrl(fileName)
@@ -380,20 +424,12 @@ export default function Profile() {
     let result = vecuDates
     if (filterCategorie) result = result.filter((d) => d.categorie === filterCategorie)
     if (filterNoteMin > 0) result = result.filter((d) => d.note_globale >= filterNoteMin)
-    if (filterPeriod !== 'all') {
-      const cutoff = new Date()
-      if (filterPeriod === 'month') cutoff.setMonth(cutoff.getMonth() - 1)
-      else if (filterPeriod === '3months') cutoff.setMonth(cutoff.getMonth() - 3)
-      else cutoff.setFullYear(cutoff.getFullYear() - 1)
-      const cutoffStr = cutoff.toISOString().slice(0, 10)
-      result = result.filter((d) => d.date_du_date >= cutoffStr)
-    }
     if (!searchQuery.trim()) return result
     const q = searchQuery.toLowerCase()
     return result.filter((d) =>
       (d.intitule ?? '').toLowerCase().includes(q) || d.lieu.toLowerCase().includes(q)
     )
-  }, [vecuDates, searchQuery, filterCategorie, filterNoteMin, filterPeriod])
+  }, [vecuDates, searchQuery, filterCategorie, filterNoteMin])
 
   const filteredPlanifie = useMemo(() => {
     if (!searchQuery.trim()) return planifieDates
@@ -402,6 +438,10 @@ export default function Profile() {
       (d.intitule ?? '').toLowerCase().includes(q) || d.lieu.toLowerCase().includes(q)
     )
   }, [planifieDates, searchQuery])
+
+  useEffect(() => {
+    if (planifieModalVisible && filteredPlanifie.length === 0) setPlanifieModalVisible(false)
+  }, [planifieModalVisible, filteredPlanifie])
 
   const moyenne = calculerMoyenne(vecuDates)
   const meilleurLieu = trouverMeilleurLieu(vecuDates)
@@ -439,6 +479,50 @@ export default function Profile() {
     await Share.share({ message: `Rejoins-moi sur Dateo ! Mon profil : @${username}` })
   }
 
+  function renderPlanifieCard(item: DateRow) {
+    return (
+      <View key={item.id} style={[styles.dateCard, styles.dateCardPlanifie]}>
+        <View style={styles.dateCardHeader}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            {item.intitule ? (
+              <>
+                <Text style={styles.dateTitre}>{item.intitule}</Text>
+                <Text style={styles.dateLieu}>📍 {item.lieu}</Text>
+              </>
+            ) : (
+              <Text style={styles.dateLieu}>{item.lieu}</Text>
+            )}
+          </View>
+          <View style={styles.planifieBadge}>
+            <Text style={styles.planifieText}>Planifié</Text>
+          </View>
+        </View>
+        <Text style={styles.dateDate}>{formaterDate(item.date_du_date)}</Text>
+        {item.commentaire ? <Text style={styles.dateComment} numberOfLines={2}>{item.commentaire}</Text> : null}
+        {confirmDeleteId === item.id ? (
+          <View style={styles.dateActions}>
+            <Text style={styles.confirmText}>Supprimer ce date ?</Text>
+            <TouchableOpacity style={styles.deleteBtn} onPress={() => execDelete(item.id)} disabled={deleting}>
+              <Text style={styles.deleteBtnText}>{deleting ? '...' : 'Oui'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.editBtn} onPress={() => setConfirmDeleteId(null)}>
+              <Text style={styles.editBtnText}>Non</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.dateActions}>
+            <TouchableOpacity style={styles.editBtn} onPress={() => { setPlanifieModalVisible(false); openEdit(item) }}>
+              <Text style={styles.editBtnText}>Modifier</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
+              <Text style={styles.deleteBtnText}>Supprimer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    )
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <FlatList
@@ -452,10 +536,26 @@ export default function Profile() {
           <View>
             <View style={styles.profileHeader}>
               <Text style={styles.title}>Profil</Text>
-              <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-                <Text style={styles.settingsBtnText}>⚙️</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {Platform.OS !== 'web' && (
+                  <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.settingsBtn}>
+                    <Ionicons name="notifications-outline" size={22} color="#D4517E" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
+                  <Text style={styles.settingsBtnText}>⚙️</Text>
+                </TouchableOpacity>
+              </View>
             </View>
+
+            {loadError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>Impossible de charger tes dates. Vérifie ta connexion.</Text>
+                <TouchableOpacity onPress={loadData}>
+                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.avatarRow}>
               <TouchableOpacity onPress={() => router.push('/settings')} activeOpacity={0.8}>
@@ -473,41 +573,25 @@ export default function Profile() {
               </View>
             </View>
 
-            <View style={styles.quickLinks}>
-              <TouchableOpacity onPress={() => router.push('/friends')}>
-                <Text style={styles.quickLink}>👫 Amis →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/stats')}>
-                <Text style={styles.quickLink}>📊 Stats →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/recap')}>
-                <Text style={styles.quickLink}>🎉 Récap {new Date().getFullYear()} →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/couple')}>
-                <Text style={styles.quickLink}>💑 Couple →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/notifications')}>
-                <Text style={styles.quickLink}>🔔 Notifs →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/leaderboard')}>
-                <Text style={styles.quickLink}>🏆 Classement →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/badges')}>
-                <Text style={styles.quickLink}>🏅 Badges →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/search')}>
-                <Text style={styles.quickLink}>🔍 Recherche →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/favorites')}>
-                <Text style={styles.quickLink}>🔖 Favoris →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/wishlist')}>
-                <Text style={styles.quickLink}>📋 Wishlist →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={shareProfile}>
-                <Text style={styles.quickLink}>🔗 Partager →</Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickLinks} contentContainerStyle={{ gap: 10, paddingRight: 8 }}>
+              {[
+                { icon: 'people-outline' as const, label: 'Amis', onPress: () => router.push('/friends') },
+                { icon: 'stats-chart-outline' as const, label: 'Stats', onPress: () => router.push('/stats') },
+                { icon: 'sparkles-outline' as const, label: 'Récap', onPress: () => router.push('/recap') },
+                { icon: 'heart-outline' as const, label: 'Couple', onPress: () => router.push('/couple') },
+                { icon: 'trophy-outline' as const, label: 'Classement', onPress: () => router.push('/leaderboard') },
+                { icon: 'ribbon-outline' as const, label: 'Badges', onPress: () => router.push('/badges') },
+                { icon: 'search-outline' as const, label: 'Recherche', onPress: () => router.push('/search') },
+                { icon: 'bookmark-outline' as const, label: 'Favoris', onPress: () => router.push('/favorites') },
+                { icon: 'location-outline' as const, label: 'À essayer', onPress: () => router.push('/wishlist') },
+                { icon: 'share-social-outline' as const, label: 'Partager', onPress: shareProfile },
+              ].map((item) => (
+                <TouchableOpacity key={item.label} style={styles.quickLink} onPress={item.onPress}>
+                  <Ionicons name={item.icon} size={20} color="#D4517E" />
+                  <Text style={styles.quickLinkText}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
@@ -549,50 +633,21 @@ export default function Profile() {
             })()}
 
             {filteredPlanifie.length > 0 && (
-              <View>
-                <Text style={styles.sectionTitle}>📅 Planifiés ({filteredPlanifie.length})</Text>
-                {filteredPlanifie.map((item) => (
-                  <View key={item.id} style={[styles.dateCard, styles.dateCardPlanifie]}>
-                    <View style={styles.dateCardHeader}>
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        {item.intitule ? (
-                          <>
-                            <Text style={styles.dateTitre}>{item.intitule}</Text>
-                            <Text style={styles.dateLieu}>📍 {item.lieu}</Text>
-                          </>
-                        ) : (
-                          <Text style={styles.dateLieu}>{item.lieu}</Text>
-                        )}
-                      </View>
-                      <View style={styles.planifieBadge}>
-                        <Text style={styles.planifieText}>Planifié</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.dateDate}>{formaterDate(item.date_du_date)}</Text>
-                    {item.commentaire ? <Text style={styles.dateComment} numberOfLines={2}>{item.commentaire}</Text> : null}
-                    {confirmDeleteId === item.id ? (
-                      <View style={styles.dateActions}>
-                        <Text style={styles.confirmText}>Supprimer ce date ?</Text>
-                        <TouchableOpacity style={styles.deleteBtn} onPress={() => execDelete(item.id)} disabled={deleting}>
-                          <Text style={styles.deleteBtnText}>{deleting ? '...' : 'Oui'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.editBtn} onPress={() => setConfirmDeleteId(null)}>
-                          <Text style={styles.editBtnText}>Non</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View style={styles.dateActions}>
-                        <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
-                          <Text style={styles.editBtnText}>Modifier</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
-                          <Text style={styles.deleteBtnText}>Supprimer</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
+              <TouchableOpacity style={styles.planifieSummary} onPress={() => setPlanifieModalVisible(true)} activeOpacity={0.8}>
+                <View style={styles.planifieSummaryIcon}>
+                  <Ionicons name="calendar" size={18} color="#D4517E" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.planifieSummaryTitle}>
+                    {filteredPlanifie.length} date{filteredPlanifie.length > 1 ? 's' : ''} planifié{filteredPlanifie.length > 1 ? 's' : ''}
+                  </Text>
+                  <Text style={styles.planifieSummarySub} numberOfLines={1}>
+                    {filteredPlanifie[0].intitule ?? filteredPlanifie[0].lieu}
+                    {filteredPlanifie.length > 1 ? ` +${filteredPlanifie.length - 1} autre${filteredPlanifie.length > 2 ? 's' : ''}` : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#B8A9A0" />
+              </TouchableOpacity>
             )}
 
             <View style={styles.searchRow}>
@@ -627,16 +682,6 @@ export default function Profile() {
             </ScrollView>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.advFilterRow} contentContainerStyle={{ gap: 6, paddingRight: 4 }}>
-              {([['all', 'Toute période'], ['month', '1 mois'], ['3months', '3 mois'], ['year', '1 an']] as const).map(([key, label]) => (
-                <TouchableOpacity
-                  key={key}
-                  style={[styles.advChip, filterPeriod === key && styles.advChipActive]}
-                  onPress={() => setFilterPeriod(key)}
-                >
-                  <Text style={[styles.advChipText, filterPeriod === key && styles.advChipTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              ))}
-              <View style={styles.advChipDivider} />
               {([0, 10, 14, 16, 18] as const).map((n) => (
                 <TouchableOpacity
                   key={n}
@@ -828,14 +873,9 @@ export default function Profile() {
               />
 
               <Text style={styles.label}>Date</Text>
-              <TextInput
-                style={styles.input}
-                value={editData.dateInput}
-                onChangeText={handleDateInputEdit}
-                placeholder="JJ/MM/AAAA"
-                placeholderTextColor="#B8A9A0"
-                keyboardType="numeric"
-                maxLength={10}
+              <DatePicker
+                value={editData.dateIso}
+                onChange={(iso) => setEditData((prev) => ({ ...prev, dateIso: iso }))}
               />
 
               <Text style={styles.label}>Catégorie <Text style={styles.labelOptional}>(optionnel)</Text></Text>
@@ -932,6 +972,25 @@ export default function Profile() {
                 numberOfLines={4}
               />
 
+              {companions.length > 0 && (
+                <>
+                  <Text style={styles.label}>Avec qui ? <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+                  <View style={styles.categoryRow}>
+                    {companions.map((c) => (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[styles.categoryChip, selectedCompanionIds.has(c.id) && styles.categoryChipActive]}
+                        onPress={() => toggleCompanion(c.id)}
+                      >
+                        <Text style={[styles.categoryChipText, selectedCompanionIds.has(c.id) && styles.categoryChipTextActive]}>
+                          @{c.username}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
               <Text style={styles.label}>Photos ({editPhotoCount}/{MAX_PHOTOS})</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoGallery}>
                 {editData.keptPhotoUrls.map((url) => (
@@ -977,6 +1036,20 @@ export default function Profile() {
           )}
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={planifieModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPlanifieModalVisible(false)}>
+        <SafeAreaView style={styles.modalSafe} edges={['top']}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Dates planifiés</Text>
+            <TouchableOpacity onPress={() => setPlanifieModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={24} color="#5C4A45" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalBody}>
+            {filteredPlanifie.map((item) => renderPlanifieCard(item))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -996,8 +1069,9 @@ const styles = StyleSheet.create({
   avatarInfo: { flex: 1 },
   email: { fontSize: 13, color: '#888', marginTop: 1 },
   username: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
-  quickLinks: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 16, marginTop: 12 },
-  quickLink: { color: '#D4517E', fontSize: 13, fontWeight: '600', backgroundColor: '#FDE8F0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  quickLinks: { marginBottom: 16, marginTop: 12, minWidth: 0 },
+  quickLink: { alignItems: 'center', gap: 4, backgroundColor: '#FDE8F0', width: 72, paddingVertical: 10, borderRadius: 14 },
+  quickLinkText: { color: '#D4517E', fontSize: 11, fontWeight: '600', textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9' },
   statCardFull: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9', marginBottom: 20 },
@@ -1038,11 +1112,18 @@ const styles = StyleSheet.create({
   dateActions: { flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' },
   confirmText: { flex: 1, fontSize: 13, color: '#D85A30', fontWeight: '500' },
   dateCardPlanifie: { borderColor: '#B8A9A0', borderStyle: 'dashed' },
+  planifieSummary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
+  planifieSummaryIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
+  planifieSummaryTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45' },
+  planifieSummarySub: { fontSize: 12, color: '#888', marginTop: 2 },
   planifieBadge: { backgroundColor: '#F0F0F0', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   planifieText: { fontSize: 11, fontWeight: '600', color: '#888' },
   searchRow: { marginBottom: 8 },
   searchInput: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 14 },
   catFilterRow: { marginBottom: 12, minWidth: 0 },
+  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
   catFilterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
   catFilterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
   catFilterText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
@@ -1115,5 +1196,4 @@ const styles = StyleSheet.create({
   advChipActive: { backgroundColor: '#5C4A45', borderColor: '#5C4A45' },
   advChipText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
   advChipTextActive: { color: '#fff', fontWeight: '700' },
-  advChipDivider: { width: 1, backgroundColor: '#F0D9D9', marginHorizontal: 4, alignSelf: 'stretch' },
 })

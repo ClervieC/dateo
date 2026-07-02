@@ -41,6 +41,13 @@ export default function Onboarding() {
     }
   }
 
+  function goBack() {
+    if (index === 0) return
+    const prev = index - 1
+    listRef.current?.scrollToIndex({ index: prev, animated: true })
+    setIndex(prev)
+  }
+
   function skip() {
     router.replace('/(tabs)/feed')
   }
@@ -53,9 +60,12 @@ export default function Onboarding() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        scrollEnabled={false}
         keyExtractor={(_, i) => String(i)}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        onMomentumScrollEnd={(e) => {
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / width)
+          setIndex(newIndex)
+        }}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
             <View style={styles.slideContent}>
@@ -79,11 +89,18 @@ export default function Onboarding() {
             {index === STEPS.length - 1 ? 'Commencer !' : 'Suivant →'}
           </Text>
         </TouchableOpacity>
-        {index < STEPS.length - 1 && (
-          <TouchableOpacity style={styles.skipBtn} onPress={skip}>
-            <Text style={styles.skipText}>Passer</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.secondaryRow}>
+          {index > 0 && (
+            <TouchableOpacity style={styles.skipBtn} onPress={goBack}>
+              <Text style={styles.skipText}>← Précédent</Text>
+            </TouchableOpacity>
+          )}
+          {index < STEPS.length - 1 && (
+            <TouchableOpacity style={styles.skipBtn} onPress={skip}>
+              <Text style={styles.skipText}>Passer</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   )
@@ -102,6 +119,7 @@ const styles = StyleSheet.create({
   actions: { paddingHorizontal: 24, paddingBottom: 48, gap: 10 },
   primaryBtn: { backgroundColor: '#D4517E', borderRadius: 16, padding: 18, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: 24 },
   skipBtn: { alignItems: 'center', padding: 10 },
   skipText: { color: '#B8A9A0', fontSize: 15 },
 })

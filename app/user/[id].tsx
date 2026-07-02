@@ -26,6 +26,8 @@ export default function UserProfile() {
   const [dates, setDates] = useState<DateRow[]>([])
   const [loading, setLoading] = useState(true)
   const [viewer, setViewer] = useState<{ photos: string[]; index: number } | null>(null)
+  const [profileNotFound, setProfileNotFound] = useState(false)
+  const [datesLoadError, setDatesLoadError] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -35,8 +37,10 @@ export default function UserProfile() {
 
   async function loadProfile(userId: string) {
     setLoading(true)
+    setProfileNotFound(false)
+    setDatesLoadError(false)
 
-    const [{ data: profileData }, { data: datesData }] = await Promise.all([
+    const [{ data: profileData, error: profileError }, { data: datesData, error: datesError }] = await Promise.all([
       supabase.from('profiles').select('username, avatar_url').eq('id', userId).single(),
       supabase
         .from('dates')
@@ -49,6 +53,8 @@ export default function UserProfile() {
     if (profileData) {
       setUsername(profileData.username)
       setAvatarUrl(profileData.avatar_url ?? null)
+    } else if (profileError) {
+      setProfileNotFound(true)
     }
     if (datesData) {
       setDates(datesData.map((d: any) => ({
@@ -63,6 +69,8 @@ export default function UserProfile() {
           .sort((a: any, b: any) => a.ordre - b.ordre)
           .map((p: any) => p.photo_url),
       })))
+    } else if (datesError) {
+      setDatesLoadError(true)
     }
 
     setLoading(false)
@@ -89,6 +97,11 @@ export default function UserProfile() {
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+      ) : profileNotFound ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>Profil introuvable</Text>
+          <Text style={styles.emptySubtext}>Ce profil n'existe plus ou n'est pas accessible</Text>
+        </View>
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
@@ -130,14 +143,25 @@ export default function UserProfile() {
                 </View>
               )}
 
+              {datesLoadError && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>Impossible de charger les dates. Vérifie ta connexion.</Text>
+                  <TouchableOpacity onPress={() => id && loadProfile(id)}>
+                    <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <Text style={styles.sectionTitle}>{dates.length} date{dates.length !== 1 ? 's' : ''}</Text>
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>Aucun date visible</Text>
-              <Text style={styles.emptySubtext}>Cette personne n'a pas encore noté de dates ou ils ne sont pas visibles pour toi</Text>
-            </View>
+            datesLoadError ? null : (
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>Aucun date visible</Text>
+                <Text style={styles.emptySubtext}>Cette personne n'a pas encore noté de dates ou ils ne sont pas visibles pour toi</Text>
+              </View>
+            )
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -224,6 +248,9 @@ const styles = StyleSheet.create({
   photoRow: { marginTop: 10, minWidth: 0 },
   photo: { width: 120, height: 120, borderRadius: 10, marginRight: 8, backgroundColor: '#F0D9D9' },
   comment: { fontSize: 14, color: '#5C4A45', marginTop: 8, lineHeight: 20 },
+  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
   empty: { alignItems: 'center', marginTop: 40 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
   emptySubtext: { fontSize: 13, color: '#888', marginTop: 6, textAlign: 'center', lineHeight: 18 },

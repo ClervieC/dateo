@@ -25,6 +25,7 @@ export default function Wishlist() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const router = useRouter()
 
   const load = useCallback(async () => {
@@ -42,20 +43,42 @@ export default function Wishlist() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
-  async function handleAdd() {
+  function openAdd() {
+    setEditingId(null)
+    setNom(''); setAdresse(''); setCategorie(null); setNote('')
+    setShowAdd(true)
+  }
+
+  function openEdit(item: WishItem) {
+    setEditingId(item.id)
+    setNom(item.nom)
+    setAdresse(item.adresse ?? '')
+    setCategorie(item.categorie)
+    setNote(item.note ?? '')
+    setShowAdd(true)
+  }
+
+  async function handleSave() {
     if (!nom.trim()) return
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSaving(false); return }
-    await supabase.from('wishlist_lieux').insert({
-      user_id: user.id,
+    const payload = {
       nom: nom.trim(),
       adresse: adresse.trim() || null,
       categorie: categorie ?? null,
       note: note.trim() || null,
-    })
+    }
+
+    if (editingId) {
+      await supabase.from('wishlist_lieux').update(payload).eq('id', editingId)
+    } else {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setSaving(false); return }
+      await supabase.from('wishlist_lieux').insert({ user_id: user.id, ...payload })
+    }
+
     setSaving(false)
     setShowAdd(false)
+    setEditingId(null)
     setNom(''); setAdresse(''); setCategorie(null); setNote('')
     load()
   }
@@ -73,8 +96,8 @@ export default function Wishlist() {
           <Ionicons name="chevron-back" size={20} color="#D4517E" />
           <Text style={styles.back}>Retour</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Wishlist</Text>
-        <TouchableOpacity onPress={() => setShowAdd(true)} style={styles.addBtn}>
+        <Text style={styles.headerTitle}>Lieux à essayer</Text>
+        <TouchableOpacity onPress={openAdd} style={styles.addBtn}>
           <Ionicons name="add" size={24} color="#D4517E" />
         </TouchableOpacity>
       </View>
@@ -86,12 +109,17 @@ export default function Wishlist() {
           contentContainerStyle={[styles.content, webContentStyle]}
           data={items}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            items.length > 0 ? (
+              <Text style={styles.subtitle}>Des lieux que tu n'as pas encore testés — pas encore vécus ni notés</Text>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={styles.emptyText}>Ta wishlist est vide</Text>
-              <Text style={styles.emptySub}>Ajoute des lieux que tu veux tester lors d'un prochain date</Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowAdd(true)}>
+              <Text style={styles.emptyIcon}>📍</Text>
+              <Text style={styles.emptyText}>Aucun lieu à essayer pour l'instant</Text>
+              <Text style={styles.emptySub}>Ajoute des lieux que tu veux tester lors d'un prochain date. Une fois testés, note-les dans "Noter" — ils apparaîtront dans tes dates favoris si tu les bookmarks.</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={openAdd}>
                 <Text style={styles.emptyBtnText}>Ajouter un lieu</Text>
               </TouchableOpacity>
             </View>
@@ -113,17 +141,31 @@ export default function Wishlist() {
                 </View>
                 {confirmDeleteId === item.id ? (
                   <View style={styles.confirmRow}>
-                    <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.confirmYes}>
-                      <Text style={styles.confirmYesText}>Oui</Text>
+                    <Text style={styles.confirmQuestion}>Supprimer ?</Text>
+                    <TouchableOpacity
+                      onPress={() => setConfirmDeleteId(null)}
+                      style={styles.confirmNo}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text style={styles.confirmNoText}>Annuler</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setConfirmDeleteId(null)} style={styles.confirmNo}>
-                      <Text style={styles.confirmNoText}>Non</Text>
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item.id)}
+                      style={styles.confirmYes}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text style={styles.confirmYesText}>Supprimer</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity onPress={() => setConfirmDeleteId(item.id)} style={styles.deleteBtn}>
-                    <Ionicons name="trash-outline" size={18} color="#B8A9A0" />
-                  </TouchableOpacity>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity onPress={() => openEdit(item)} style={styles.deleteBtn}>
+                      <Ionicons name="pencil-outline" size={18} color="#B8A9A0" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setConfirmDeleteId(item.id)} style={styles.deleteBtn}>
+                      <Ionicons name="trash-outline" size={18} color="#B8A9A0" />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </View>
@@ -137,10 +179,10 @@ export default function Wishlist() {
             <TouchableOpacity onPress={() => setShowAdd(false)}>
               <Text style={styles.modalCancel}>Annuler</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Ajouter un lieu</Text>
-            <TouchableOpacity onPress={handleAdd} disabled={!nom.trim() || saving}>
+            <Text style={styles.modalTitle}>{editingId ? 'Modifier le lieu' : 'Ajouter un lieu'}</Text>
+            <TouchableOpacity onPress={handleSave} disabled={!nom.trim() || saving}>
               <Text style={[styles.modalSave, (!nom.trim() || saving) && styles.modalSaveDisabled]}>
-                {saving ? '...' : 'Ajouter'}
+                {saving ? '...' : editingId ? 'Enregistrer' : 'Ajouter'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -200,6 +242,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
   addBtn: { width: 40, alignItems: 'flex-end' },
   content: { padding: 20, paddingBottom: 60 },
+  subtitle: { fontSize: 12, color: '#888', marginBottom: 14, lineHeight: 17 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
   cardMain: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   cardNom: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 2 },
@@ -208,11 +251,13 @@ const styles = StyleSheet.create({
   catChip: { alignSelf: 'flex-start', backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4 },
   catChipText: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
   deleteBtn: { padding: 4 },
-  confirmRow: { flexDirection: 'column', gap: 4 },
-  confirmYes: { backgroundColor: '#D85A30', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  cardActions: { flexDirection: 'row', gap: 4 },
+  confirmRow: { flexDirection: 'column', gap: 8, alignItems: 'flex-end' },
+  confirmQuestion: { fontSize: 11, color: '#888', marginBottom: 2 },
+  confirmYes: { backgroundColor: '#D85A30', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   confirmYesText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  confirmNo: { borderRadius: 8, borderWidth: 1, borderColor: '#D0C5C0', paddingHorizontal: 10, paddingVertical: 6 },
-  confirmNoText: { color: '#888', fontSize: 12 },
+  confirmNo: { borderRadius: 8, borderWidth: 1, borderColor: '#D0C5C0', paddingHorizontal: 12, paddingVertical: 8 },
+  confirmNoText: { color: '#888', fontSize: 12, fontWeight: '600' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 10 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },

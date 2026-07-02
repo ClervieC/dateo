@@ -1,11 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { formaterDate } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
+
+const LAST_SEEN_KEY = 'notifLastSeen'
 
 type NotifItem = {
   id: string
@@ -20,10 +23,17 @@ type NotifItem = {
 export default function Notifications() {
   const [notifs, setNotifs] = useState<NotifItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastSeen, setLastSeen] = useState<string | null>(null)
   const router = useRouter()
+  const lastSeenAtOpenRef = useRef<string | null>(null)
 
   const loadNotifs = useCallback(async () => {
     setLoading(true)
+    if (lastSeenAtOpenRef.current === null) {
+      const stored = await AsyncStorage.getItem(LAST_SEEN_KEY)
+      lastSeenAtOpenRef.current = stored ?? ''
+      setLastSeen(stored)
+    }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
@@ -92,7 +102,15 @@ export default function Notifications() {
     setLoading(false)
   }, [])
 
-  useFocusEffect(useCallback(() => { loadNotifs() }, [loadNotifs]))
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifs()
+      return () => {
+        AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
+        lastSeenAtOpenRef.current = null
+      }
+    }, [loadNotifs])
+  )
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -119,33 +137,37 @@ export default function Notifications() {
               <Text style={styles.emptySub}>Les likes et commentaires sur tes dates apparaîtront ici</Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => router.push(`/date/${item.date_id}`)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.iconCircle}>
-                <Ionicons
-                  name={item.type === 'reaction' ? 'heart' : 'chatbubble'}
-                  size={18}
-                  color="#D4517E"
-                />
-              </View>
-              <View style={styles.body}>
-                <Text style={styles.notifText}>
-                  <Text style={styles.actor}>@{item.actor_username}</Text>
-                  {item.type === 'reaction' ? ' a aimé ton date ' : ' a commenté ton date '}
-                  <Text style={styles.dateName}>{item.date_name}</Text>
-                </Text>
-                {item.type === 'comment' && item.content && (
-                  <Text style={styles.preview} numberOfLines={1}>"{item.content}"</Text>
-                )}
-                <Text style={styles.time}>{formaterDate(item.created_at.slice(0, 10))}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#D0C5C0" />
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isUnread = !lastSeen || item.created_at > lastSeen
+            return (
+              <TouchableOpacity
+                style={[styles.card, isUnread && styles.cardUnread]}
+                onPress={() => router.push(`/date/${item.date_id}`)}
+                activeOpacity={0.8}
+              >
+                {isUnread && <View style={styles.unreadDot} />}
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name={item.type === 'reaction' ? 'heart' : 'chatbubble'}
+                    size={18}
+                    color="#D4517E"
+                  />
+                </View>
+                <View style={styles.body}>
+                  <Text style={styles.notifText}>
+                    <Text style={styles.actor}>@{item.actor_username}</Text>
+                    {item.type === 'reaction' ? ' a aimé ton date ' : ' a commenté ton date '}
+                    <Text style={styles.dateName}>{item.date_name}</Text>
+                  </Text>
+                  {item.type === 'comment' && item.content && (
+                    <Text style={styles.preview} numberOfLines={1}>"{item.content}"</Text>
+                  )}
+                  <Text style={styles.time}>{formaterDate(item.created_at.slice(0, 10))}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D0C5C0" />
+              </TouchableOpacity>
+            )
+          }}
         />
       )}
     </SafeAreaView>
@@ -164,6 +186,8 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
   emptySub: { fontSize: 13, color: '#888', textAlign: 'center', paddingHorizontal: 40, lineHeight: 18 },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9', gap: 12 },
+  cardUnread: { backgroundColor: '#FFF8FA', borderColor: '#F4C0D1' },
+  unreadDot: { position: 'absolute', top: 12, left: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4517E' },
   iconCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   body: { flex: 1 },
   notifText: { fontSize: 14, color: '#5C4A45', lineHeight: 20 },

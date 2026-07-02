@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
@@ -18,6 +18,8 @@ export default function Friends() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [myId, setMyId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
 
   const loadData = useCallback(async () => {
@@ -85,8 +87,7 @@ export default function Friends() {
     }, [loadData])
   )
 
-  async function handleSearch(text: string) {
-    setQuery(text)
+  async function doSearch(text: string) {
     if (!requeteValide(text)) {
       setResults([])
       return
@@ -102,7 +103,13 @@ export default function Friends() {
     if (!error && data) setResults(data)
     setLoading(false)
   }
-    
+
+  function handleSearch(text: string) {
+    setQuery(text)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSearch(text), 350)
+  }
+
   async function sendRequest(friendId: string) {
     const { data: existing } = await supabase
       .from('friends')
@@ -161,6 +168,12 @@ export default function Friends() {
     loadData()
   }
 
+  async function removeFriend(friendRowId: string) {
+    await supabase.from('friends').delete().eq('id', friendRowId)
+    setConfirmRemoveId(null)
+    loadData()
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.container, webContentStyle]}>
@@ -194,6 +207,20 @@ export default function Friends() {
                   {friends.map((f) => (
                     <View key={f.id} style={styles.row}>
                       <Text style={styles.username}>{f.username}</Text>
+                      {confirmRemoveId === f.id ? (
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity style={styles.declineButton} onPress={() => removeFriend(f.id)}>
+                            <Text style={styles.declineText}>Confirmer</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.cancelButton} onPress={() => setConfirmRemoveId(null)}>
+                            <Text style={styles.cancelText}>Annuler</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity onPress={() => setConfirmRemoveId(f.id)}>
+                          <Text style={styles.removeText}>Retirer</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))}
                 </View>
@@ -257,9 +284,12 @@ const styles = StyleSheet.create({
   actionButtons: { flexDirection: 'row', gap: 8 },
   addButton: { backgroundColor: '#D4517E', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
   addText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  acceptButton: { backgroundColor: '#639922', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
+  acceptButton: { backgroundColor: '#3B6D11', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
   acceptText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   declineButton: { backgroundColor: '#F0D9D9', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
   declineText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
+  cancelButton: { paddingVertical: 6, paddingHorizontal: 10 },
+  cancelText: { color: '#888', fontWeight: '500', fontSize: 13 },
+  removeText: { color: '#B8A9A0', fontSize: 13, fontWeight: '500' },
   empty: { color: '#888', textAlign: 'center', marginTop: 20 },
 })

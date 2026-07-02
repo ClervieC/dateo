@@ -27,6 +27,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
             overflow-x: hidden;
             max-width: 100%;
           }
+          /* Retire le halo de focus noir par défaut du navigateur sur les champs texte */
+          input, textarea {
+            outline: none;
+          }
         ` }} />
       </head>
       <body>{children}</body>

@@ -44,13 +44,22 @@ function WebNavBar() {
             style={{ height: 26, width: 69, maxWidth: '100%' }}
             resizeMode="contain"
           />
-          <TouchableOpacity
-            onPress={() => setMenuOpen((o) => !o)}
-            style={webStyles.burgerBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name={menuOpen ? 'close' : 'menu'} size={26} color="#D4517E" />
-          </TouchableOpacity>
+          <View style={webStyles.compactActions}>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={webStyles.bellBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="notifications-outline" size={22} color="#D4517E" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setMenuOpen((o) => !o)}
+              style={webStyles.burgerBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name={menuOpen ? 'close' : 'menu'} size={26} color="#D4517E" />
+            </TouchableOpacity>
+          </View>
         </View>
         {menuOpen && (
           <>
@@ -89,22 +98,31 @@ function WebNavBar() {
         style={{ height: 38, width: 101, maxWidth: '100%' }}
         resizeMode="contain"
       />
-      <View style={webStyles.links}>
-        {TABS.map(tab => {
-          const active = pathname.endsWith(`/${tab.name}`)
-          return (
-            <TouchableOpacity
-              key={tab.name}
-              onPress={() => router.replace(`/(tabs)/${tab.name}` as any)}
-              style={webStyles.link}
-            >
-              <Text style={[webStyles.linkText, active && webStyles.linkTextActive]}>
-                {tab.label}
-              </Text>
-              {active && <View style={webStyles.linkUnderline} />}
-            </TouchableOpacity>
-          )
-        })}
+      <View style={webStyles.rightGroup}>
+        <View style={webStyles.links}>
+          {TABS.map(tab => {
+            const active = pathname.endsWith(`/${tab.name}`)
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                onPress={() => router.replace(`/(tabs)/${tab.name}` as any)}
+                style={webStyles.link}
+              >
+                <Text style={[webStyles.linkText, active && webStyles.linkTextActive]}>
+                  {tab.label}
+                </Text>
+                {active && <View style={webStyles.linkUnderline} />}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/notifications')}
+          style={webStyles.bellBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="notifications-outline" size={22} color="#D4517E" />
+        </TouchableOpacity>
       </View>
     </View>
   )
@@ -231,6 +249,8 @@ const webStyles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   compactWrap: { position: 'relative', zIndex: 100 },
+  compactActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bellBtn: { padding: 4 },
   burgerBtn: { padding: 4 },
   menuBackdrop: {
     position: 'absolute',
@@ -265,6 +285,7 @@ const webStyles = StyleSheet.create({
   },
   mobileMenuItemActive: { backgroundColor: '#FDE8F0' },
   brand: { fontSize: 22, fontWeight: '700', color: '#D4517E', letterSpacing: -0.5 },
+  rightGroup: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   links: { flexDirection: 'row' },
   link: { height: 60, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   linkText: { fontSize: 14, fontWeight: '500', color: '#888' },

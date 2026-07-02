@@ -34,6 +34,12 @@
           "icon": "./assets/logoVertical.png",
           "color": "#D4517E"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Dateo utilise ta position pour te proposer des idées de dates près de chez toi."
+        }
       ]
     ]
   }
