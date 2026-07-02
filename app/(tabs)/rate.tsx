@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { NotificationBell } from '../../lib/NotificationBell'
 import { toastStore } from '../../lib/toastStore'
 import { CATEGORIES } from '../../lib/categories'
 import Slider from '@react-native-community/slider'
@@ -343,11 +344,7 @@ export default function Rate() {
         <ScrollView style={styles.container} contentContainerStyle={[styles.content, webContentStyle]}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{editingPlanifieId ? 'Noter un date planifié' : 'Nouveau date'}</Text>
-            {Platform.OS !== 'web' && (
-              <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
-                <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-              </TouchableOpacity>
-            )}
+            {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
           </View>
 
           {!editingPlanifieId && !selectedWishlistId && (planifiedDates.length > 0 || wishlistLieux.length > 0) && (

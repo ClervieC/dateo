@@ -7,8 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { formaterDate } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
-
-const LAST_SEEN_KEY = 'notifLastSeen'
+import { NOTIF_LAST_SEEN_KEY, markNotificationsSeen } from '../lib/notifications'
 
 type NotifItem = {
   id: string
@@ -30,7 +29,7 @@ export default function Notifications() {
   const loadNotifs = useCallback(async () => {
     setLoading(true)
     if (lastSeenAtOpenRef.current === null) {
-      const stored = await AsyncStorage.getItem(LAST_SEEN_KEY)
+      const stored = await AsyncStorage.getItem(NOTIF_LAST_SEEN_KEY)
       lastSeenAtOpenRef.current = stored ?? ''
       setLastSeen(stored)
     }
@@ -106,7 +105,7 @@ export default function Notifications() {
     useCallback(() => {
       loadNotifs()
       return () => {
-        AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
+        markNotificationsSeen()
         lastSeenAtOpenRef.current = null
       }
     }, [loadNotifs])

@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, Image, ScrollView, ActivityIndicator,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { NotificationBell } from '../../lib/NotificationBell'
 import { supabase } from '../../lib/supabase'
 import { webContentStyle } from '../../lib/webStyles'
 import { formaterDate } from '../../lib/dateUtils'
@@ -292,11 +293,7 @@ export default function Feed() {
           <View>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Feed</Text>
-              {Platform.OS !== 'web' && (
-                <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
-                  <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-                </TouchableOpacity>
-              )}
+              {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
             </View>
 
             {loadError && (

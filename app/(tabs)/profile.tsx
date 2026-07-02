@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Alert, Image, ScrollView, Modal, KeyboardAvoidingView, Platform, Switch, Share } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { NotificationBell } from '../../lib/NotificationBell'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import Slider from '@react-native-community/slider'
@@ -537,11 +538,7 @@ export default function Profile() {
             <View style={styles.profileHeader}>
               <Text style={styles.title}>Profil</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {Platform.OS !== 'web' && (
-                  <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.settingsBtn}>
-                    <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-                  </TouchableOpacity>
-                )}
+                {Platform.OS !== 'web' && <NotificationBell style={styles.settingsBtn} />}
                 <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
                   <Text style={styles.settingsBtnText}>⚙️</Text>
                 </TouchableOpacity>

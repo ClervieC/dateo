@@ -5,6 +5,8 @@ import { Session } from '@supabase/supabase-js'
 import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
+import { NotificationBell } from '../lib/NotificationBell'
+import { refreshUnreadNotifications, watchNotifications } from '../lib/notifications'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -45,13 +47,7 @@ function WebNavBar() {
             resizeMode="contain"
           />
           <View style={webStyles.compactActions}>
-            <TouchableOpacity
-              onPress={() => router.push('/notifications')}
-              style={webStyles.bellBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-            </TouchableOpacity>
+            <NotificationBell style={webStyles.bellBtn} />
             <TouchableOpacity
               onPress={() => setMenuOpen((o) => !o)}
               style={webStyles.burgerBtn}
@@ -116,13 +112,7 @@ function WebNavBar() {
             )
           })}
         </View>
-        <TouchableOpacity
-          onPress={() => router.push('/notifications')}
-          style={webStyles.bellBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-        </TouchableOpacity>
+        <NotificationBell style={webStyles.bellBtn} />
       </View>
     </View>
   )
@@ -176,6 +166,12 @@ export default function RootLayout() {
 
     return () => listener.subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (!session) return
+    refreshUnreadNotifications(session.user.id)
+    return watchNotifications(session.user.id)
+  }, [session?.user.id])
 
   useEffect(() => {
     if (loading) return

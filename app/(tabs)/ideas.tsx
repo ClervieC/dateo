@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { NotificationBell } from '../../lib/NotificationBell'
 import { supabase } from '../../lib/supabase'
 import { extraireCategories, filtrerParCategorie } from '../../lib/feedUtils'
 import { CATEGORIES, getCategoryLabel, getCategoryColor } from '../../lib/categories'
@@ -228,11 +229,7 @@ export default function Ideas() {
           <View>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Idées de dates</Text>
-              {Platform.OS !== 'web' && (
-                <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bellBtn}>
-                  <Ionicons name="notifications-outline" size={22} color="#D4517E" />
-                </TouchableOpacity>
-              )}
+              {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
             </View>
 
             <View style={styles.searchBar}>
