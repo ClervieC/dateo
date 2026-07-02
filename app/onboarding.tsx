@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, Image } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
-
-const { width } = Dimensions.get('window')
 
 const STEPS = [
   {
@@ -31,6 +29,7 @@ export default function Onboarding() {
   const [index, setIndex] = useState(0)
   const listRef = useRef<FlatList>(null)
   const router = useRouter()
+  const { width } = useWindowDimensions()
 
   function goNext() {
     if (index < STEPS.length - 1) {
@@ -58,10 +57,12 @@ export default function Onboarding() {
         keyExtractor={(_, i) => String(i)}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
-          <View style={styles.slide}>
-            <Text style={styles.emoji}>{item.emoji}</Text>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.subtitle}>{item.subtitle}</Text>
+          <View style={[styles.slide, { width }]}>
+            <View style={styles.slideContent}>
+              <Text style={styles.emoji}>{item.emoji}</Text>
+              <Text style={styles.title}>{item.title}</Text>
+              <Text style={styles.subtitle}>{item.subtitle}</Text>
+            </View>
           </View>
         )}
       />
@@ -90,7 +91,8 @@ export default function Onboarding() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF8F5' },
-  slide: { width, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  slide: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  slideContent: { maxWidth: 480, width: '100%', alignItems: 'center' },
   emoji: { fontSize: 72, marginBottom: 24 },
   title: { fontSize: 28, fontWeight: '800', color: '#D4517E', textAlign: 'center', marginBottom: 16, lineHeight: 34 },
   subtitle: { fontSize: 16, color: '#888', textAlign: 'center', lineHeight: 24 },

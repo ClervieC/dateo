@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6, marginTop: 16 },
   input: { borderRadius: 12, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 15, backgroundColor: '#fff', color: '#5C4A45' },
   inputMulti: { height: 80, textAlignVertical: 'top' },
-  catRow: { flexGrow: 0, marginBottom: 4 },
+  catRow: { flexGrow: 0, marginBottom: 4, minWidth: 0 },
   catOption: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
   catOptionActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
   catOptionText: { fontSize: 13, color: '#5C4A45', fontWeight: '500' },

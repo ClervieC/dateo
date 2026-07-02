@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { Modal, View, Image, TouchableOpacity, Text, StyleSheet, Dimensions, FlatList } from 'react-native'
+import { Modal, View, Image, TouchableOpacity, Text, StyleSheet, FlatList, useWindowDimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-
-const { width, height } = Dimensions.get('window')
 
 type Props = {
   photos: string[]
@@ -13,6 +11,7 @@ type Props = {
 
 export function PhotoViewer({ photos, initialIndex = 0, visible, onClose }: Props) {
   const [current, setCurrent] = useState(initialIndex)
+  const { width, height } = useWindowDimensions()
 
   return (
     <Modal visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
@@ -37,8 +36,8 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose }: Prop
             setCurrent(newIndex)
           }}
           renderItem={({ item }) => (
-            <View style={styles.page}>
-              <Image source={{ uri: item }} style={styles.image} resizeMode="contain" />
+            <View style={[styles.page, { width, height }]}>
+              <Image source={{ uri: item }} style={[styles.image, { width, height: height * 0.85 }]} resizeMode="contain" />
             </View>
           )}
           keyExtractor={(_, i) => String(i)}
@@ -58,8 +57,8 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose }: Prop
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  page: { width, height, justifyContent: 'center', alignItems: 'center' },
-  image: { width, height: height * 0.85 },
+  page: { justifyContent: 'center', alignItems: 'center' },
+  image: {},
   closeBtn: { position: 'absolute', top: 52, right: 20, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   closeText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   counter: { position: 'absolute', top: 56, left: 20, zIndex: 10, color: '#fff', fontSize: 14, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },

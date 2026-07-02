@@ -87,7 +87,7 @@ export default function UsernameSetup() {
 const styles = StyleSheet.create({
   outer: { flex: 1, justifyContent: 'center', backgroundColor: '#FFF8F5' },
   form: { padding: 24 },
-  logo: { height: 120, aspectRatio: 555 / 700, alignSelf: 'center', marginBottom: 4 },
+  logo: { height: 120, width: 101, maxWidth: '100%', alignSelf: 'center', marginBottom: 4 },
   title: { fontSize: 26, fontWeight: '700', color: '#D4517E', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 16 },

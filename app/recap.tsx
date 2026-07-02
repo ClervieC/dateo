@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, useWindowDimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { CATEGORIES, getCategoryLabel } from '../lib/categories'
 
-const { width } = Dimensions.get('window')
 const YEAR = new Date().getFullYear()
 const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
@@ -17,6 +16,7 @@ export default function Recap() {
   const [slide, setSlide] = useState(0)
   const listRef = useRef<FlatList>(null)
   const router = useRouter()
+  const { width } = useWindowDimensions()
 
   useEffect(() => {
     async function load() {
@@ -156,14 +156,16 @@ export default function Recap() {
         keyExtractor={(_, i) => String(i)}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         renderItem={({ item }) => (
-          <View style={[styles.slide, { backgroundColor: item.bg }]}>
-            <Text style={styles.slideEmoji}>{item.emoji}</Text>
-            <Text style={[styles.slideTitle, { color: item.textColor }]}>{item.title}</Text>
-            <Text style={[styles.slideValue, { color: item.textColor }]}>{item.value}</Text>
-            <Text style={[styles.slideLabel, { color: item.textColor, opacity: 0.75 }]}>{item.label}</Text>
-            {(item as any).sub && (
-              <Text style={[styles.slideSub, { color: item.textColor, opacity: 0.6 }]}>{(item as any).sub}</Text>
-            )}
+          <View style={[styles.slide, { width, backgroundColor: item.bg }]}>
+            <View style={styles.slideContent}>
+              <Text style={styles.slideEmoji}>{item.emoji}</Text>
+              <Text style={[styles.slideTitle, { color: item.textColor }]}>{item.title}</Text>
+              <Text style={[styles.slideValue, { color: item.textColor }]}>{item.value}</Text>
+              <Text style={[styles.slideLabel, { color: item.textColor, opacity: 0.75 }]}>{item.label}</Text>
+              {(item as any).sub && (
+                <Text style={[styles.slideSub, { color: item.textColor, opacity: 0.6 }]}>{(item as any).sub}</Text>
+              )}
+            </View>
           </View>
         )}
       />
@@ -188,7 +190,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   closeBtn: { position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 8 },
   closeText: { fontSize: 18, fontWeight: '700' },
-  slide: { width, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingTop: 40 },
+  slide: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingTop: 40 },
+  slideContent: { maxWidth: 480, width: '100%', alignItems: 'center' },
   slideEmoji: { fontSize: 64, marginBottom: 20 },
   slideTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 12, opacity: 0.85 },
   slideValue: { fontSize: 52, fontWeight: '900', textAlign: 'center', marginBottom: 12, lineHeight: 60 },

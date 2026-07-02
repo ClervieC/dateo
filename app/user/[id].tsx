@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   lieuAddress: { fontSize: 12, color: '#888', marginTop: 1 },
   note: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
   date: { fontSize: 12, color: '#888' },
-  photoRow: { marginTop: 10 },
+  photoRow: { marginTop: 10, minWidth: 0 },
   photo: { width: 120, height: 120, borderRadius: 10, marginRight: 8, backgroundColor: '#F0D9D9' },
   comment: { fontSize: 14, color: '#5C4A45', marginTop: 8, lineHeight: 20 },
   empty: { alignItems: 'center', marginTop: 40 },

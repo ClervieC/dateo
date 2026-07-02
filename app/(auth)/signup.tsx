@@ -108,7 +108,7 @@ export default function Signup() {
 const styles = StyleSheet.create({
   outer: { flex: 1, justifyContent: 'center', backgroundColor: '#FFF8F5' },
   form: { padding: 24 },
-  logo: { height: 140, aspectRatio: 555 / 700, alignSelf: 'center', marginBottom: 8 },
+  logo: { height: 140, width: 118, maxWidth: '100%', alignSelf: 'center', marginBottom: 8 },
   title: { fontSize: 32, fontWeight: '600', color: '#D4517E', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },

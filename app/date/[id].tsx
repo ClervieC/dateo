@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
   noteGlobaleLabel: { fontSize: 13, color: '#888', marginBottom: 4 },
   noteGlobaleValue: { fontSize: 52, fontWeight: '800', color: '#D4517E', lineHeight: 60 },
   noteGlobaleSuffix: { fontSize: 22, fontWeight: '500', color: '#B8A9A0' },
-  photoRow: { marginBottom: 20 },
+  photoRow: { marginBottom: 20, minWidth: 0 },
   photo: { width: 240, height: 240, borderRadius: 14, marginRight: 12, backgroundColor: '#F0D9D9' },
   commentBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9' },
   commentLabel: { fontSize: 12, color: '#888', fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },

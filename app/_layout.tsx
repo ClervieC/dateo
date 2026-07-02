@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
-import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native'
+import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, useWindowDimensions } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 
 Notifications.setNotificationHandler({
@@ -25,12 +26,67 @@ const TABS = [
 function WebNavBar() {
   const router = useRouter()
   const pathname = usePathname()
+  const { width } = useWindowDimensions()
+  const compact = width < 600
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  function goTo(name: string) {
+    setMenuOpen(false)
+    router.replace(`/(tabs)/${name}` as any)
+  }
+
+  if (compact) {
+    return (
+      <View style={webStyles.compactWrap}>
+        <View style={[webStyles.nav, webStyles.navCompact]}>
+          <Image
+            source={require('../assets/logoHorizontal.png')}
+            style={{ height: 26, width: 69, maxWidth: '100%' }}
+            resizeMode="contain"
+          />
+          <TouchableOpacity
+            onPress={() => setMenuOpen((o) => !o)}
+            style={webStyles.burgerBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name={menuOpen ? 'close' : 'menu'} size={26} color="#D4517E" />
+          </TouchableOpacity>
+        </View>
+        {menuOpen && (
+          <>
+            <TouchableOpacity
+              style={webStyles.menuBackdrop}
+              activeOpacity={1}
+              onPress={() => setMenuOpen(false)}
+            />
+            <View style={webStyles.mobileMenu}>
+              {TABS.map(tab => {
+                const active = pathname.endsWith(`/${tab.name}`)
+                return (
+                  <TouchableOpacity
+                    key={tab.name}
+                    onPress={() => goTo(tab.name)}
+                    style={[webStyles.mobileMenuItem, active && webStyles.mobileMenuItemActive]}
+                  >
+                    <Ionicons name={tab.icon} size={18} color={active ? '#D4517E' : '#888'} />
+                    <Text style={[webStyles.linkText, active && webStyles.linkTextActive]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </>
+        )}
+      </View>
+    )
+  }
 
   return (
     <View style={webStyles.nav}>
       <Image
         source={require('../assets/logoHorizontal.png')}
-        style={{ height: 38, aspectRatio: 960 / 305 }}
+        style={{ height: 38, width: 101, maxWidth: '100%' }}
         resizeMode="contain"
       />
       <View style={webStyles.links}>
@@ -106,8 +162,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading) return
 
-    const inAuthGroup = segments[0] === '(auth)'
-    const screen = segments[1] as string | undefined
+    const segmentList = segments as string[]
+    const inAuthGroup = segmentList[0] === '(auth)'
+    const screen = segmentList[1]
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login')
@@ -170,9 +227,46 @@ const webStyles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  navCompact: {
+    paddingHorizontal: 16,
+  },
+  compactWrap: { position: 'relative', zIndex: 100 },
+  burgerBtn: { padding: 4 },
+  menuBackdrop: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    bottom: -2000,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  mobileMenu: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0D9D9',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  mobileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  mobileMenuItemActive: { backgroundColor: '#FDE8F0' },
   brand: { fontSize: 22, fontWeight: '700', color: '#D4517E', letterSpacing: -0.5 },
   links: { flexDirection: 'row' },
-  link: { paddingHorizontal: 20, height: 60, justifyContent: 'center', alignItems: 'center' },
+  link: { height: 60, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   linkText: { fontSize: 14, fontWeight: '500', color: '#888' },
   linkTextActive: { color: '#D4517E', fontWeight: '600' },
   linkUnderline: {
