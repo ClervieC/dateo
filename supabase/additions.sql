@@ -80,3 +80,7 @@ update date_ideas set categorie = 'restaurant' where categorie = 'Gastronomie';
 update date_ideas set categorie = 'culture' where categorie = 'Culture';
 update date_ideas set categorie = 'sport' where categorie = 'Aventure';
 update date_ideas set categorie = 'autre' where categorie in ('Cocooning', 'IA');
+
+-- Réponses aux commentaires : parent_id pointe vers le commentaire auquel on répond.
+-- null = commentaire de premier niveau.
+alter table date_comments add column if not exists parent_id uuid references date_comments(id) on delete cascade;

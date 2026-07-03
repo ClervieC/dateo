@@ -179,24 +179,49 @@ export default function Settings() {
     setExportingCSV(true)
     const { data } = await supabase
       .from('dates')
-      .select('intitule, lieu, date_du_date, note_globale, commentaire, categorie, statut, conseil_vivement')
+      .select(`
+        intitule, lieu, date_du_date, note_globale, commentaire, categorie, statut, conseil_vivement, visibilite,
+        ratings(mood, nourriture, ambiance, personne, conversation, prix, envie_recommencer),
+        date_participants(profiles(username))
+      `)
       .eq('user_id', userId)
       .order('date_du_date', { ascending: false })
 
     if (!data) { setExportingCSV(false); return }
 
-    const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
-    const headers = 'Intitulé,Lieu,Date,Note,Commentaire,Catégorie,Statut,Conseillé vivement'
-    const rows = (data as any[]).map((d) => [
-      escape(d.intitule ?? ''),
-      escape(d.lieu),
-      d.date_du_date,
-      d.note_globale,
-      escape(d.commentaire ?? ''),
-      d.categorie ?? '',
-      d.statut ?? 'vecu',
-      d.conseil_vivement ? 'Oui' : 'Non',
-    ].join(','))
+    const escape = (s: string) => `"${String(s).replace(/"/g, '""')}"`
+    const headers = [
+      'Intitulé', 'Lieu', 'Date', 'Note globale', 'Commentaire', 'Catégorie', 'Statut',
+      'Conseillé vivement', 'Visibilité', 'Avec qui',
+      'Mood', 'Nourriture', 'Ambiance', 'La personne', 'Conversation', 'Prix', 'Envie de recommencer',
+    ].join(',')
+
+    const rows = (data as any[]).map((d) => {
+      const r = Array.isArray(d.ratings) ? d.ratings[0] : d.ratings
+      const avecQui = (d.date_participants ?? [])
+        .map((p: any) => p.profiles?.username)
+        .filter(Boolean)
+        .join(' & ')
+      return [
+        escape(d.intitule ?? ''),
+        escape(d.lieu),
+        d.date_du_date,
+        d.note_globale ?? '',
+        escape(d.commentaire ?? ''),
+        d.categorie ?? '',
+        d.statut ?? 'vecu',
+        d.conseil_vivement ? 'Oui' : 'Non',
+        d.visibilite === 'private' ? 'Privé' : 'Amis',
+        escape(avecQui),
+        r?.mood ?? '',
+        r?.nourriture ?? '',
+        r?.ambiance ?? '',
+        r?.personne ?? '',
+        r?.conversation ?? '',
+        r?.prix ?? '',
+        r?.envie_recommencer ?? '',
+      ].join(',')
+    })
 
     await Share.share({ message: [headers, ...rows].join('\n'), title: 'Mes dates Dateo' })
     setExportingCSV(false)

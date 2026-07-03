@@ -9,9 +9,11 @@ import { formaterDate } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
 import { NOTIF_LAST_SEEN_KEY, markNotificationsSeen } from '../lib/notifications'
 
+const NOTIF_READ_IDS_KEY = 'notifReadIds'
+
 type NotifItem = {
   id: string
-  type: 'reaction' | 'comment'
+  type: 'reaction' | 'comment' | 'mention'
   actor_username: string
   date_id: string
   date_name: string
@@ -23,8 +25,19 @@ export default function Notifications() {
   const [notifs, setNotifs] = useState<NotifItem[]>([])
   const [loading, setLoading] = useState(true)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
+  const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const router = useRouter()
   const lastSeenAtOpenRef = useRef<string | null>(null)
+
+  async function markRead(id: string) {
+    setReadIds((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      AsyncStorage.setItem(NOTIF_READ_IDS_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
 
   const loadNotifs = useCallback(async () => {
     setLoading(true)
@@ -32,41 +45,64 @@ export default function Notifications() {
       const stored = await AsyncStorage.getItem(NOTIF_LAST_SEEN_KEY)
       lastSeenAtOpenRef.current = stored ?? ''
       setLastSeen(stored)
+      const storedReadIds = await AsyncStorage.getItem(NOTIF_READ_IDS_KEY)
+      if (storedReadIds) setReadIds(new Set(JSON.parse(storedReadIds)))
     }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
+
+    const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
 
     const { data: myDates } = await supabase
       .from('dates')
       .select('id, lieu, intitule')
       .eq('user_id', user.id)
 
-    if (!myDates || myDates.length === 0) { setLoading(false); return }
-
-    const dateIds = myDates.map((d: any) => d.id)
+    const dateIds = (myDates ?? []).map((d: any) => d.id)
     const dateMap: Record<string, string> = {}
-    for (const d of myDates as any[]) {
+    for (const d of (myDates ?? []) as any[]) {
       dateMap[d.id] = (d.intitule ?? d.lieu) as string
     }
 
-    const [{ data: reactions }, { data: comments }] = await Promise.all([
-      supabase.from('date_reactions')
-        .select('id, date_id, user_id, created_at')
-        .in('date_id', dateIds)
-        .neq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(60),
-      supabase.from('date_comments')
-        .select('id, date_id, user_id, content, created_at')
-        .in('date_id', dateIds)
-        .neq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(60),
+    const [{ data: reactions }, { data: comments }, { data: mentionComments }] = await Promise.all([
+      dateIds.length > 0
+        ? supabase.from('date_reactions')
+            .select('id, date_id, user_id, created_at')
+            .in('date_id', dateIds)
+            .neq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(60)
+        : Promise.resolve({ data: [] }),
+      dateIds.length > 0
+        ? supabase.from('date_comments')
+            .select('id, date_id, user_id, content, created_at')
+            .in('date_id', dateIds)
+            .neq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(60)
+        : Promise.resolve({ data: [] }),
+      myProfile?.username
+        ? supabase.from('date_comments')
+            .select('id, date_id, user_id, content, created_at')
+            .ilike('content', `%@${myProfile.username}%`)
+            .neq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(60)
+        : Promise.resolve({ data: [] }),
     ])
+
+    const commentDateIds = [...new Set((mentionComments ?? []).map((c: any) => c.date_id))]
+    const { data: mentionDates } = commentDateIds.length > 0
+      ? await supabase.from('dates').select('id, lieu, intitule').in('id', commentDateIds)
+      : { data: [] as any[] }
+    for (const d of mentionDates ?? []) dateMap[(d as any).id] = ((d as any).intitule ?? (d as any).lieu) as string
+
+    const commentIds = new Set((comments ?? []).map((c: any) => c.id))
 
     const userIds = [...new Set([
       ...(reactions ?? []).map((r: any) => r.user_id),
       ...(comments ?? []).map((c: any) => c.user_id),
+      ...(mentionComments ?? []).map((c: any) => c.user_id),
     ])]
 
     const { data: profiles } = await supabase
@@ -94,8 +130,20 @@ export default function Notifications() {
       content: c.content,
     }))
 
+    const mentionNotifs: NotifItem[] = (mentionComments ?? [])
+      .filter((c: any) => !commentIds.has(c.id))
+      .map((c: any) => ({
+        id: `m_${c.id}`,
+        type: 'mention',
+        actor_username: profileMap[c.user_id] ?? '?',
+        date_id: c.date_id,
+        date_name: dateMap[c.date_id] ?? '',
+        created_at: c.created_at,
+        content: c.content,
+      }))
+
     setNotifs(
-      [...reactionNotifs, ...commentNotifs]
+      [...reactionNotifs, ...commentNotifs, ...mentionNotifs]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     )
     setLoading(false)
@@ -137,17 +185,17 @@ export default function Notifications() {
             </View>
           }
           renderItem={({ item }) => {
-            const isUnread = !lastSeen || item.created_at > lastSeen
+            const isUnread = (!lastSeen || item.created_at > lastSeen) && !readIds.has(item.id)
             return (
               <TouchableOpacity
                 style={[styles.card, isUnread && styles.cardUnread]}
-                onPress={() => router.push(`/date/${item.date_id}`)}
+                onPress={() => { markRead(item.id); router.push(`/date/${item.date_id}`) }}
                 activeOpacity={0.8}
               >
                 {isUnread && <View style={styles.unreadDot} />}
                 <View style={styles.iconCircle}>
                   <Ionicons
-                    name={item.type === 'reaction' ? 'heart' : 'chatbubble'}
+                    name={item.type === 'reaction' ? 'heart' : item.type === 'mention' ? 'at' : 'chatbubble'}
                     size={18}
                     color="#D4517E"
                   />
@@ -155,10 +203,10 @@ export default function Notifications() {
                 <View style={styles.body}>
                   <Text style={styles.notifText}>
                     <Text style={styles.actor}>@{item.actor_username}</Text>
-                    {item.type === 'reaction' ? ' a aimé ton date ' : ' a commenté ton date '}
+                    {item.type === 'reaction' ? ' a aimé ton date ' : item.type === 'mention' ? ' t\'a mentionné sur ' : ' a commenté ton date '}
                     <Text style={styles.dateName}>{item.date_name}</Text>
                   </Text>
-                  {item.type === 'comment' && item.content && (
+                  {(item.type === 'comment' || item.type === 'mention') && item.content && (
                     <Text style={styles.preview} numberOfLines={1}>"{item.content}"</Text>
                   )}
                   <Text style={styles.time}>{formaterDate(item.created_at.slice(0, 10))}</Text>

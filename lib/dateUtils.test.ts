@@ -1,4 +1,4 @@
-import { calculerMoyenne, trouverMeilleurLieu, validerFormulaireDate, clamperNote, DateRow } from './dateUtils'
+import { calculerMoyenne, trouverMeilleurLieu, validerFormulaireDate, clamperNote, formatNote, todayIso, formaterDate, DateRow } from './dateUtils'
 
 const faireDate = (overrides: Partial<DateRow>): DateRow => ({
   id: '1',
@@ -109,5 +109,47 @@ describe('clamperNote', () => {
   it('fonctionne à la limite exacte', () => {
     expect(clamperNote(20, 20)).toBe(20)
     expect(clamperNote(0, 20)).toBe(0)
+  })
+})
+
+describe('formatNote', () => {
+  it('supprime les artefacts flottants du step 0.25 des sliders', () => {
+    expect(formatNote(3.2500000000000004)).toBe('3.25')
+  })
+
+  it('retire les zéros inutiles', () => {
+    expect(formatNote(3)).toBe('3')
+    expect(formatNote(3.5)).toBe('3.5')
+    expect(formatNote(3.0)).toBe('3')
+  })
+
+  it('garde deux décimales quand nécessaire', () => {
+    expect(formatNote(3.25)).toBe('3.25')
+  })
+})
+
+describe('todayIso', () => {
+  it('retourne une date au format AAAA-MM-JJ correspondant à aujourd\'hui (heure locale)', () => {
+    const result = todayIso()
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    const now = new Date()
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    expect(result).toBe(expected)
+  })
+})
+
+describe('formaterDate', () => {
+  it('formate une date ISO en français', () => {
+    expect(formaterDate('2026-07-03')).toBe('3 juillet 2026')
+  })
+
+  it('gère les mois à deux chiffres', () => {
+    expect(formaterDate('2026-01-15')).toBe('15 janvier 2026')
+    expect(formaterDate('2026-12-25')).toBe('25 décembre 2026')
+  })
+
+  it('retourne la chaîne telle quelle si elle n\'a pas 3 segments', () => {
+    expect(formaterDate('invalide')).toBe('invalide')
+    expect(formaterDate('2026-07')).toBe('2026-07')
   })
 })

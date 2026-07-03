@@ -14,18 +14,25 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (!user) return json({ error: 'Non autorisé' })
 
-  const { date_owner_id, commenter_username, date_intitule, comment_preview } = await req.json()
+  const { date_owner_id, commenter_username, date_intitule, comment_preview, type } = await req.json()
   if (user.id === date_owner_id) return json({ ok: true })
 
   const { data: profile } = await supabase.from('profiles').select('expo_push_token').eq('id', date_owner_id).single()
   if (!profile?.expo_push_token) return json({ ok: true })
+
+  const isMention = type === 'mention'
+  const isReply = type === 'reply'
 
   await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       to: profile.expo_push_token,
-      title: `💬 @${commenter_username} a commenté`,
+      title: isMention
+        ? `📣 @${commenter_username} t'a mentionné`
+        : isReply
+        ? `↩️ @${commenter_username} a répondu à ton commentaire`
+        : `💬 @${commenter_username} a commenté`,
       body: comment_preview || `Sur "${date_intitule || 'ton date'}"`,
       sound: 'default',
     }),

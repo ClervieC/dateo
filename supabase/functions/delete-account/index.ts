@@ -22,10 +22,33 @@ Deno.serve(async (req) => {
   const { data: { user }, error: userError } = await supabase.auth.getUser(token)
   if (userError || !user) return jsonResponse({ error: 'Utilisateur non trouvé' })
 
-  // Supprimer les données utilisateur (dates cascade delete ratings/photos/comments)
+  // Supprimer les données utilisateur. Les tables dates/ratings/date_photos n'ont pas
+  // de vraies contraintes ON DELETE CASCADE (cf. suppression manuelle d'un date dans
+  // profile.tsx), donc tout est nettoyé explicitement ici, dans l'ordre, y compris ce
+  // que d'autres utilisateurs ont laissé SUR les dates de ce compte (réactions,
+  // commentaires, favoris, notes de partenaire, participants).
+  const { data: myDates } = await supabase.from('dates').select('id').eq('user_id', user.id)
+  const dateIds = (myDates ?? []).map((d: any) => d.id)
+
+  if (dateIds.length > 0) {
+    await supabase.from('ratings').delete().in('date_id', dateIds)
+    await supabase.from('date_photos').delete().in('date_id', dateIds)
+    await supabase.from('date_participants').delete().in('date_id', dateIds)
+    await supabase.from('date_partner_ratings').delete().in('date_id', dateIds)
+    await supabase.from('date_reactions').delete().in('date_id', dateIds)
+    await supabase.from('date_comments').delete().in('date_id', dateIds)
+    await supabase.from('user_favorites').delete().in('date_id', dateIds)
+  }
+
+  // Ce que cet utilisateur a laissé sur les dates des autres
   await supabase.from('date_reactions').delete().eq('user_id', user.id)
   await supabase.from('date_comments').delete().eq('user_id', user.id)
   await supabase.from('user_favorites').delete().eq('user_id', user.id)
+  await supabase.from('date_participants').delete().eq('user_id', user.id)
+  await supabase.from('date_partner_ratings').delete().eq('partner_id', user.id)
+
+  await supabase.from('wishlist_lieux').delete().eq('user_id', user.id)
+  await supabase.from('couples').delete().or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
   await supabase.from('friends').delete().or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
   await supabase.from('dates').delete().eq('user_id', user.id)
   await supabase.from('profiles').delete().eq('id', user.id)

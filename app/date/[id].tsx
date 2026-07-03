@@ -33,8 +33,7 @@ type DateDetail = {
   ratings: Record<string, number> | null
   categorie: string | null
   visibilite: string
-  participants: string[]
-  participantIds: string[]
+  participants: { id: string; username: string }[]
 }
 
 type DateComment = {
@@ -44,6 +43,7 @@ type DateComment = {
   avatar_url: string | null
   content: string
   created_at: string
+  parent_id: string | null
 }
 
 export default function DateDetail() {
@@ -60,6 +60,11 @@ export default function DateDetail() {
   const [commentError, setCommentError] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
   const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionSuggestions, setMentionSuggestions] = useState<{ id: string; username: string }[]>([])
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
   const [partnerId, setPartnerId] = useState<string | null>(null)
   const [partnerRating, setPartnerRating] = useState<{ note_globale: number; commentaire: string | null; username: string } | null>(null)
   const [myPartnerNote, setMyPartnerNote] = useState<{ note_globale: number; commentaire: string } | null>(null)
@@ -195,8 +200,9 @@ export default function DateDetail() {
           .sort((a: any, b: any) => a.ordre - b.ordre)
           .map((p: any) => p.photo_url),
         ratings: ratingsData ?? null,
-        participants: (participantsData ?? []).map((p: any) => p.profiles?.username).filter(Boolean),
-        participantIds: (participantsData ?? []).map((p: any) => p.user_id),
+        participants: (participantsData ?? [])
+          .filter((p: any) => p.profiles?.username)
+          .map((p: any) => ({ id: p.user_id, username: p.profiles.username })),
       })
     }
     setLoading(false)
@@ -205,7 +211,7 @@ export default function DateDetail() {
   async function loadComments(dateId: string) {
     const { data } = await supabase
       .from('date_comments')
-      .select('id, user_id, content, created_at')
+      .select('id, user_id, content, created_at, parent_id')
       .eq('date_id', dateId)
       .order('created_at', { ascending: true })
 
@@ -232,11 +238,141 @@ export default function DateDetail() {
       avatar_url: profileMap[c.user_id]?.avatar_url ?? null,
       content: c.content,
       created_at: c.created_at,
+      parent_id: c.parent_id ?? null,
     })))
   }
 
-  async function sendComment() {
-    if (!commentText.trim() || !id) return
+  function handleCommentTextChange(text: string) {
+    setCommentText(text)
+    const match = text.match(/(?:^|\s)@(\w{1,30})$/)
+    if (match) {
+      setMentionQuery(match[1])
+    } else {
+      setMentionQuery(null)
+      setMentionSuggestions([])
+    }
+  }
+
+  useEffect(() => {
+    if (mentionQuery === null) return
+    const timeout = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .ilike('username', `${mentionQuery}%`)
+        .limit(5)
+      setMentionSuggestions((data ?? []).filter((p) => p.username))
+    }, 200)
+    return () => clearTimeout(timeout)
+  }, [mentionQuery])
+
+  function selectMention(username: string) {
+    setCommentText((prev) => prev.replace(/(?:^|\s)@(\w{1,30})$/, (m) => (m.startsWith(' ') ? ' ' : '') + `@${username} `))
+    setMentionQuery(null)
+    setMentionSuggestions([])
+  }
+
+  async function navigateToMention(username: string) {
+    const { data } = await supabase.from('profiles').select('id').eq('username', username).single()
+    if (data) {
+      if (data.id === myId) router.push('/(tabs)/profile')
+      else router.push(`/user/${data.id}`)
+    }
+  }
+
+  function renderCommentContent(content: string) {
+    const parts = content.split(/(@\w{1,30})/g)
+    return (
+      <Text style={styles.commentContent}>
+        {parts.map((part, idx) =>
+          part.startsWith('@') ? (
+            <Text key={idx} style={styles.commentMention} onPress={() => navigateToMention(part.slice(1))}>
+              {part}
+            </Text>
+          ) : (
+            <Text key={idx}>{part}</Text>
+          )
+        )}
+      </Text>
+    )
+  }
+
+  function renderCommentCard(c: DateComment, isReply = false) {
+    return (
+      <View style={[styles.commentCard, isReply && styles.commentCardReply]}>
+        <View style={styles.commentCardHeader}>
+          {c.avatar_url ? (
+            <Image source={{ uri: c.avatar_url }} style={styles.commentAvatar} />
+          ) : (
+            <View style={styles.commentAvatarPlaceholder}>
+              <Text style={styles.commentAvatarInitial}>{c.username.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.commentUsername}>@{c.username}</Text>
+            <Text style={styles.commentTime}>{formatCommentTime(c.created_at)}</Text>
+          </View>
+          {c.user_id === myId && confirmDeleteCommentId !== c.id && (
+            <TouchableOpacity
+              onPress={() => setConfirmDeleteCommentId(c.id)}
+              disabled={deletingCommentId === c.id}
+            >
+              <Text style={styles.commentDelete}>{deletingCommentId === c.id ? '...' : '×'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {renderCommentContent(c.content)}
+        <TouchableOpacity
+          onPress={() => {
+            if (replyingTo === c.id) {
+              setReplyingTo(null)
+            } else {
+              setReplyingTo(c.id)
+              setReplyText(`@${c.username} `)
+            }
+          }}
+        >
+          <Text style={styles.commentReplyBtn}>{replyingTo === c.id ? 'Annuler' : 'Répondre'}</Text>
+        </TouchableOpacity>
+        {confirmDeleteCommentId === c.id && (
+          <View style={styles.commentConfirmRow}>
+            <Text style={styles.commentConfirmText}>Supprimer ce commentaire ?</Text>
+            <TouchableOpacity onPress={() => deleteComment(c.id)}>
+              <Text style={styles.commentConfirmYes}>Oui</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setConfirmDeleteCommentId(null)}>
+              <Text style={styles.commentConfirmNo}>Non</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {replyingTo === c.id && (
+          <View style={styles.replyInputRow}>
+            <TextInput
+              style={styles.replyInput}
+              value={replyText}
+              onChangeText={setReplyText}
+              placeholder={`Répondre à @${c.username}...`}
+              placeholderTextColor="#B8A9A0"
+              multiline
+              maxLength={500}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.replySendBtn, !replyText.trim() && styles.commentSendBtnDisabled]}
+              onPress={() => sendComment(replyText, c.id)}
+              disabled={sendingReply || !replyText.trim()}
+            >
+              <Text style={styles.commentSendText}>{sendingReply ? '...' : '↑'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    )
+  }
+
+  async function sendComment(overrideText?: string, parentId: string | null = null) {
+    const text = (overrideText ?? commentText).trim()
+    if (!text || !id) return
     setCommentError('')
 
     let userId = myIdRef.current
@@ -248,39 +384,68 @@ export default function DateDetail() {
       myIdRef.current = userId
     }
 
-    setSendingComment(true)
+    if (parentId) setSendingReply(true)
+    else setSendingComment(true)
     const { error } = await supabase.from('date_comments').insert({
       date_id: id,
       user_id: userId,
-      content: commentText.trim(),
+      content: text,
+      parent_id: parentId,
     })
-    setSendingComment(false)
+    if (parentId) setSendingReply(false)
+    else setSendingComment(false)
 
     if (error) {
       setCommentError(`Erreur : ${error.message}`)
       return
     }
 
-    setCommentText('')
+    if (parentId) {
+      setReplyingTo(null)
+      setReplyText('')
+    } else {
+      setCommentText('')
+    }
     await loadComments(id)
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100)
 
+    const { data: { session } } = await supabase.auth.getSession()
+    const { data: me } = await supabase.from('profiles').select('username').eq('id', userId).single()
+    if (!session || !me) return
+    const accessToken = session.access_token
+
+    const notified = new Set<string>([userId])
+
+    async function notify(targetId: string, type: 'comment' | 'reply' | 'mention') {
+      if (notified.has(targetId)) return
+      notified.add(targetId)
+      fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          date_owner_id: targetId,
+          commenter_username: me!.username,
+          date_intitule: detail?.intitule ?? detail?.lieu,
+          comment_preview: text.slice(0, 80),
+          type,
+        }),
+      })
+    }
+
+    // Notifier l'auteur du commentaire parent (réponse)
+    if (parentId) {
+      const parentComment = comments.find((c) => c.id === parentId)
+      if (parentComment) await notify(parentComment.user_id, 'reply')
+    }
+
     // Notifier le propriétaire du date
-    if (detail && detail.user_id !== userId) {
-      const { data: { session } } = await supabase.auth.getSession()
-      const { data: me } = await supabase.from('profiles').select('username').eq('id', userId).single()
-      if (session && me) {
-        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-comment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({
-            date_owner_id: detail.user_id,
-            commenter_username: me.username,
-            date_intitule: detail.intitule ?? detail.lieu,
-            comment_preview: commentText.trim().slice(0, 80),
-          }),
-        })
-      }
+    if (detail) await notify(detail.user_id, 'comment')
+
+    // Notifier les personnes mentionnées avec @username
+    const mentionedUsernames = [...new Set([...text.matchAll(/@(\w{1,30})/g)].map((m) => m[1]))]
+    if (mentionedUsernames.length > 0) {
+      const { data: mentioned } = await supabase.from('profiles').select('id, username').in('username', mentionedUsernames)
+      for (const p of mentioned ?? []) await notify(p.id, 'mention')
     }
   }
 
@@ -390,7 +555,19 @@ export default function DateDetail() {
             </View>
 
             {detail.participants.length > 0 && (
-              <Text style={styles.participants}>👥 Avec {detail.participants.map((u) => `@${u}`).join(', ')}</Text>
+              <View style={styles.participantsRow}>
+                <Text style={styles.participantsLabel}>👥 Avec</Text>
+                {detail.participants.map((p, idx) => (
+                  <TouchableOpacity
+                    key={p.id}
+                    onPress={() => p.id === myId ? router.push('/(tabs)/profile') : router.push(`/user/${p.id}`)}
+                  >
+                    <Text style={styles.participantLink}>
+                      @{p.username}{idx < detail.participants.length - 1 ? ',' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
 
             <View style={styles.noteGlobaleBox}>
@@ -400,7 +577,7 @@ export default function DateDetail() {
             </View>
 
             {/* Note du partenaire (uniquement si j'ai participé à ce date précis) */}
-            {detail.user_id !== myId && partnerId && detail.user_id === partnerId && detail.participantIds.includes(myId) && (
+            {detail.user_id !== myId && partnerId && detail.user_id === partnerId && detail.participants.some((p) => p.id === myId) && (
               <View style={styles.partnerRatingBox}>
                 <Text style={styles.partnerRatingTitle}>Mon avis sur ce date</Text>
                 {myPartnerNote && !editingPartnerNote ? (
@@ -515,63 +692,47 @@ export default function DateDetail() {
                 <Text style={styles.commentsEmpty}>Aucun commentaire pour l'instant</Text>
               )}
 
-              {comments.map((c) => (
-                <View key={c.id} style={styles.commentCard}>
-                  <View style={styles.commentCardHeader}>
-                    {c.avatar_url ? (
-                      <Image source={{ uri: c.avatar_url }} style={styles.commentAvatar} />
-                    ) : (
-                      <View style={styles.commentAvatarPlaceholder}>
-                        <Text style={styles.commentAvatarInitial}>{c.username.charAt(0).toUpperCase()}</Text>
-                      </View>
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.commentUsername}>@{c.username}</Text>
-                      <Text style={styles.commentTime}>{formatCommentTime(c.created_at)}</Text>
+              {comments.filter((c) => !c.parent_id).map((c) => (
+                <View key={c.id}>
+                  {renderCommentCard(c)}
+                  {comments.filter((r) => r.parent_id === c.id).map((r) => (
+                    <View key={r.id} style={styles.replyIndent}>
+                      {renderCommentCard(r, true)}
                     </View>
-                    {c.user_id === myId && confirmDeleteCommentId !== c.id && (
-                      <TouchableOpacity
-                        onPress={() => setConfirmDeleteCommentId(c.id)}
-                        disabled={deletingCommentId === c.id}
-                      >
-                        <Text style={styles.commentDelete}>{deletingCommentId === c.id ? '...' : '×'}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <Text style={styles.commentContent}>{c.content}</Text>
-                  {confirmDeleteCommentId === c.id && (
-                    <View style={styles.commentConfirmRow}>
-                      <Text style={styles.commentConfirmText}>Supprimer ce commentaire ?</Text>
-                      <TouchableOpacity onPress={() => deleteComment(c.id)}>
-                        <Text style={styles.commentConfirmYes}>Oui</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setConfirmDeleteCommentId(null)}>
-                        <Text style={styles.commentConfirmNo}>Non</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  ))}
                 </View>
               ))}
 
               {commentError ? <Text style={styles.commentErrText}>{commentError}</Text> : null}
 
-              <View style={styles.commentInputRow}>
-                <TextInput
-                  style={styles.commentInput}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  placeholder="Ajoute un commentaire..."
-                  placeholderTextColor="#B8A9A0"
-                  multiline
-                  maxLength={500}
-                />
-                <TouchableOpacity
-                  style={[styles.commentSendBtn, !commentText.trim() && styles.commentSendBtnDisabled]}
-                  onPress={sendComment}
-                  disabled={sendingComment || !commentText.trim()}
-                >
-                  <Text style={styles.commentSendText}>{sendingComment ? '...' : '↑'}</Text>
-                </TouchableOpacity>
+              <View style={styles.commentInputWrap}>
+                {mentionSuggestions.length > 0 && (
+                  <View style={styles.mentionDropdown}>
+                    {mentionSuggestions.map((s) => (
+                      <TouchableOpacity key={s.id} style={styles.mentionItem} onPress={() => selectMention(s.username)}>
+                        <Text style={styles.mentionItemText}>@{s.username}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                <View style={styles.commentInputRow}>
+                  <TextInput
+                    style={styles.commentInput}
+                    value={commentText}
+                    onChangeText={handleCommentTextChange}
+                    placeholder="Ajoute un commentaire... (@ pour mentionner)"
+                    placeholderTextColor="#B8A9A0"
+                    multiline
+                    maxLength={500}
+                  />
+                  <TouchableOpacity
+                    style={[styles.commentSendBtn, !commentText.trim() && styles.commentSendBtnDisabled]}
+                    onPress={() => sendComment()}
+                    disabled={sendingComment || !commentText.trim()}
+                  >
+                    <Text style={styles.commentSendText}>{sendingComment ? '...' : '↑'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               {commentText.length > 400 && (
                 <Text style={styles.commentCharCount}>{commentText.length}/500</Text>
@@ -612,7 +773,9 @@ const styles = StyleSheet.create({
   meta: { fontSize: 13, color: '#888' },
   catBadge: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   catBadgeText: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
-  participants: { fontSize: 13, color: '#5C4A45', marginTop: -12, marginBottom: 20 },
+  participantsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -12, marginBottom: 20 },
+  participantsLabel: { fontSize: 13, color: '#5C4A45' },
+  participantLink: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
   noteGlobaleBox: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9', alignItems: 'center' },
   noteGlobaleLabel: { fontSize: 13, color: '#888', marginBottom: 4 },
   noteGlobaleValue: { fontSize: 52, fontWeight: '800', color: '#D4517E', lineHeight: 60 },
@@ -637,6 +800,7 @@ const styles = StyleSheet.create({
   commentsTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
   commentsEmpty: { fontSize: 13, color: '#B8A9A0', marginBottom: 12 },
   commentCard: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+  commentCardReply: { marginBottom: 8, paddingBottom: 0, borderBottomWidth: 0 },
   commentCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   commentAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F0D9D9' },
   commentAvatarPlaceholder: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
@@ -645,6 +809,33 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#B8A9A0' },
   commentDelete: { fontSize: 18, color: '#B8A9A0', paddingHorizontal: 4 },
   commentContent: { fontSize: 14, color: '#5C4A45', lineHeight: 20, marginLeft: 38 },
+  commentMention: { color: '#D4517E', fontWeight: '600' },
+  commentReplyBtn: { fontSize: 12, color: '#B8A9A0', fontWeight: '600', marginLeft: 38, marginTop: 4 },
+  replyIndent: { marginLeft: 30, marginTop: 8, marginBottom: 4, borderLeftWidth: 2, borderLeftColor: '#F0D9D9', paddingLeft: 8 },
+  replyInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 8, marginLeft: 38 },
+  replyInput: { flex: 1, backgroundColor: '#FFF8F5', borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#5C4A45', maxHeight: 80 },
+  replySendBtn: { backgroundColor: '#D4517E', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  commentInputWrap: { position: 'relative' },
+  mentionDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#F0D9D9',
+    borderRadius: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 10,
+  },
+  mentionItem: { paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+  mentionItemText: { fontSize: 14, color: '#5C4A45', fontWeight: '600' },
   commentConfirmRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 38, marginTop: 6 },
   commentConfirmText: { fontSize: 12, color: '#888', flex: 1 },
   commentConfirmYes: { fontSize: 13, fontWeight: '700', color: '#D85A30' },

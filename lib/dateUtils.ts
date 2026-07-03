@@ -34,29 +34,9 @@ export function formatNote(note: number): string {
   return Number(note).toFixed(2).replace(/\.?0+$/, '')
 }
 
-export function todayFr(): string {
-  const d = new Date()
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-}
-
 export function todayIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-export function parseDateFr(input: string): string | null {
-  const match = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (!match) return null
-  const [, dd, mm, yyyy] = match
-  const date = new Date(`${yyyy}-${mm}-${dd}`)
-  if (isNaN(date.getTime())) return null
-  return `${yyyy}-${mm}-${dd}`
-}
-
-export function dateIsoToFr(dateIso: string): string {
-  const parts = dateIso.split('-')
-  if (parts.length !== 3) return dateIso
-  return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']

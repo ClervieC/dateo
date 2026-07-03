@@ -32,7 +32,7 @@ type FeedItem = {
   reactionCount: number
   myReaction: boolean
   commentCount: number
-  participants: string[]
+  participants: { id: string; username: string }[]
 }
 
 export default function Feed() {
@@ -116,7 +116,7 @@ export default function Feed() {
 
     const { data, error } = await supabase
       .from('dates')
-      .select('id, intitule, lieu, date_du_date, note_globale, commentaire, user_id, conseil_vivement, statut, categorie, visibilite, profiles(username, avatar_url), date_photos(photo_url, ordre), date_participants(profiles(username))')
+      .select('id, intitule, lieu, date_du_date, note_globale, commentaire, user_id, conseil_vivement, statut, categorie, visibilite, profiles(username, avatar_url), date_photos(photo_url, ordre), date_participants(user_id, profiles(username))')
       .in('user_id', allowedIds)
       .eq('statut', 'vecu')
       .or(`user_id.eq.${userId}${partnerIdRef.current ? `,user_id.eq.${partnerIdRef.current}` : ''},visibilite.eq.friends,visibilite.is.null`)
@@ -144,7 +144,9 @@ export default function Feed() {
       photos: (d.date_photos ?? [])
         .sort((a: any, b: any) => a.ordre - b.ordre)
         .map((p: any) => p.photo_url),
-      participants: (d.date_participants ?? []).map((p: any) => p.profiles?.username).filter(Boolean),
+      participants: (d.date_participants ?? [])
+        .filter((p: any) => p.profiles?.username)
+        .map((p: any) => ({ id: p.user_id, username: p.profiles.username })),
     }))
 
     return enrichWithCounts(raw, userId)
@@ -408,7 +410,16 @@ export default function Feed() {
             </View>
 
             {item.participants.length > 0 && (
-              <Text style={styles.participants}>👥 Avec {item.participants.map((u) => `@${u}`).join(', ')}</Text>
+              <View style={styles.participantsRow}>
+                <Text style={styles.participantsLabel}>👥 Avec</Text>
+                {item.participants.map((p, idx) => (
+                  <TouchableOpacity key={p.id} onPress={() => navigateToUser(p.id)}>
+                    <Text style={styles.participantLink}>
+                      @{p.username}{idx < item.participants.length - 1 ? ',' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
 
             {item.photos.length > 0 && (
@@ -548,7 +559,9 @@ const styles = StyleSheet.create({
   commentCount: { fontSize: 13, color: '#B8A9A0', fontWeight: '600' },
   dateMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   catChip: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  participants: { fontSize: 12, color: '#5C4A45', marginTop: 4 },
+  participantsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  participantsLabel: { fontSize: 12, color: '#5C4A45' },
+  participantLink: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
   catChipText: { fontSize: 11, color: '#D4517E', fontWeight: '600' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 12 },

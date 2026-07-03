@@ -19,9 +19,14 @@ const STEPS = [
     subtitle: 'Ajoutez vos amis pour voir leurs dates préférés et découvrir de nouvelles idées dans le feed.',
   },
   {
+    emoji: '💑',
+    title: 'En couple ou entre amis',
+    subtitle: 'Liez votre compte à celui de votre partenaire pour tout partager, ou précisez simplement avec qui vous étiez sur chaque date.',
+  },
+  {
     emoji: '💡',
     title: 'Trouvez l\'inspiration',
-    subtitle: 'Parcourez des idées de dates dans l\'onglet Idées et planifiez vos prochaines sorties.',
+    subtitle: 'Laisse l\'IA te proposer des idées selon tes goûts, un thème ou ta ville. Garde aussi une liste de lieux à essayer.',
   },
 ]
 
