@@ -119,27 +119,17 @@ export default function Couple() {
 
   async function sendCoupleInviteNotification(recipientId: string, type: 'invite' | 'accepted' = 'invite') {
     try {
-      const [{ data: sender }, { data: recipient }] = await Promise.all([
-        supabase.from('profiles').select('username').eq('id', myId).single(),
-        supabase.from('profiles').select('expo_push_token').eq('id', recipientId).single(),
-      ])
-
-      const token = recipient?.expo_push_token
-      if (!token) return
-
-      const senderName = sender?.username ?? 'Quelqu\'un'
-      const title = type === 'invite' ? '💑 Invitation en mode couple' : '💑 Invitation acceptée'
-      const body = type === 'invite'
-        ? `${senderName} veut lier son compte au tien sur Dateo`
-        : `${senderName} a accepté ton invitation en mode couple`
-
-      await fetch('https://exp.host/push/send', {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      // Le token push de destinataire n'est jamais lu côté client : la edge function
+      // vérifie qu'une ligne "couples" justifie la notification avant de l'envoyer.
+      await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-social`, {
         method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: token, title, body, data: { screen: 'couple' } }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ recipient_id: recipientId, type: type === 'invite' ? 'couple_invite' : 'couple_accepted' }),
       })
     } catch {
-      // Notification silencieusement ignorée si l'utilisateur n'a pas de token
+      // Notification silencieusement ignorée en cas d'échec réseau
     }
   }
 

@@ -22,9 +22,10 @@ async function checkRateLimit(supabase: any, key: string, limit: number, windowS
   return true
 }
 
-// Le client n'envoie que date_id : tout le reste (auteur, titre, destinataire) est
-// dérivé côté serveur à partir de données vérifiées, pour empêcher un utilisateur
-// d'usurper un titre/texte de notification ou de cibler un destinataire arbitraire.
+// Notifications pour les demandes d'ami et les invitations en mode couple.
+// Le client ne fournit que recipient_id + type ; le serveur vérifie qu'une ligne
+// friends/couples correspondante existe réellement avant d'envoyer quoi que ce soit,
+// et lit le push token uniquement côté serveur (jamais exposé au client).
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -35,39 +36,50 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (!user) return json({ error: 'Non autorisé' })
 
-  if (!(await checkRateLimit(supabase, `notify-reaction:${user.id}`, 30, 60))) {
+  if (!(await checkRateLimit(supabase, `notify-social:${user.id}`, 30, 60))) {
     return json({ error: 'Trop de requêtes, réessaie dans une minute' })
   }
 
-  const { date_id } = await req.json()
-  if (!date_id) return json({ error: 'date_id manquant' })
+  const { recipient_id, type } = await req.json()
+  if (!recipient_id || !['friend_request', 'couple_invite', 'couple_accepted'].includes(type)) {
+    return json({ error: 'Requête invalide' })
+  }
+  if (recipient_id === user.id) return json({ ok: true })
 
-  // Vérifie que l'utilisateur a bien réagi à ce date (empêche de déclencher une
-  // notification pour un date auquel il n'a jamais réagi).
-  const { data: reaction } = await supabase
-    .from('date_reactions')
-    .select('id')
-    .eq('date_id', date_id)
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (!reaction) return json({ error: 'Réaction introuvable' })
+  let authorized = false
+  if (type === 'friend_request') {
+    const { data } = await supabase.from('friends').select('id')
+      .eq('user_id', user.id).eq('friend_id', recipient_id).maybeSingle()
+    authorized = !!data
+  } else {
+    const { data } = await supabase.from('couples').select('id')
+      .or(`and(user1_id.eq.${user.id},user2_id.eq.${recipient_id}),and(user1_id.eq.${recipient_id},user2_id.eq.${user.id})`)
+      .maybeSingle()
+    authorized = !!data
+  }
+  if (!authorized) return json({ error: 'Relation introuvable' })
 
-  const { data: date } = await supabase.from('dates').select('user_id, intitule, lieu').eq('id', date_id).single()
-  if (!date || date.user_id === user.id) return json({ ok: true })
-
-  const [{ data: profile }, { data: sender }] = await Promise.all([
-    supabase.from('profiles').select('expo_push_token').eq('id', date.user_id).single(),
+  const [{ data: sender }, { data: recipient }] = await Promise.all([
     supabase.from('profiles').select('username').eq('id', user.id).single(),
+    supabase.from('profiles').select('expo_push_token').eq('id', recipient_id).single(),
   ])
-  if (!profile?.expo_push_token) return json({ ok: true })
+  if (!recipient?.expo_push_token) return json({ ok: true })
+
+  const senderUsername = sender?.username ?? 'Quelqu\'un'
+  const { title, body } = type === 'friend_request'
+    ? { title: '💌 Nouvelle demande d\'ami', body: `${senderUsername} veut être ton ami sur Dateo` }
+    : type === 'couple_invite'
+    ? { title: '💑 Invitation en mode couple', body: `${senderUsername} veut lier son compte au tien sur Dateo` }
+    : { title: '💑 Invitation acceptée', body: `${senderUsername} a accepté ton invitation en mode couple` }
 
   await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      to: profile.expo_push_token,
-      title: '❤️ Nouveau j\'aime',
-      body: `@${sender?.username ?? 'Quelqu\'un'} a aimé "${date.intitule || date.lieu || 'ton date'}"`,
+      to: recipient.expo_push_token,
+      title,
+      body,
+      data: { screen: type === 'friend_request' ? 'friends' : 'couple' },
       sound: 'default',
     }),
   })

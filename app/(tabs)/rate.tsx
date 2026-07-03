@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Switch, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { NotificationBell } from '../../lib/NotificationBell'
 import { toastStore } from '../../lib/toastStore'
 import { CATEGORIES } from '../../lib/categories'
@@ -14,6 +15,9 @@ import { DatePicker } from '../../lib/DatePicker'
 import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'react-native'
 import { uriToBlob } from '../../lib/uploadImage'
+
+const RATE_DRAFT_KEY = 'rateFormDraft'
+const DEFAULT_RATINGS = { mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 }
 
 const CRITERES = [
   { key: 'mood', label: 'Mood' },
@@ -50,7 +54,7 @@ export default function Rate() {
   const [dateIso, setDateIso] = useState(todayIso())
   const [commentaire, setCommentaire] = useState('')
   const [noteGlobale, setNoteGlobale] = useState(10)
-  const [ratings, setRatings] = useState({ mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 })
+  const [ratings, setRatings] = useState(DEFAULT_RATINGS)
   const [conseilVivement, setConseilVivement] = useState(false)
   const [statut, setStatut] = useState<'vecu' | 'planifie'>('vecu')
   const [categorie, setCategorie] = useState<string | null>(null)
@@ -69,11 +73,54 @@ export default function Rate() {
   const [selectedWishlistId, setSelectedWishlistId] = useState<string | null>(null)
   const [pickerVisible, setPickerVisible] = useState(false)
   const router = useRouter()
+  const draftReadyRef = useRef(false)
 
   useEffect(() => {
     if (lieuParam && typeof lieuParam === 'string') setLieu(lieuParam)
     if (intituleParam && typeof intituleParam === 'string') setIntitule(intituleParam)
   }, [lieuParam, intituleParam])
+
+  // Restaure le brouillon (si l'écran n'a pas été ouvert avec un lieu/intitulé prérempli)
+  // pour ne pas perdre la saisie quand on change d'onglet puis qu'on revient.
+  useEffect(() => {
+    async function restoreDraft() {
+      if (!lieuParam && !intituleParam) {
+        const raw = await AsyncStorage.getItem(RATE_DRAFT_KEY)
+        if (raw) {
+          try {
+            const d = JSON.parse(raw)
+            setIntitule(d.intitule ?? '')
+            setLieu(d.lieu ?? '')
+            setDateIso(d.dateIso ?? todayIso())
+            setCommentaire(d.commentaire ?? '')
+            setNoteGlobale(d.noteGlobale ?? 10)
+            setRatings(d.ratings ?? DEFAULT_RATINGS)
+            setConseilVivement(d.conseilVivement ?? false)
+            setStatut(d.statut ?? 'vecu')
+            setCategorie(d.categorie ?? null)
+            setVisibilite(d.visibilite ?? 'friends')
+            setPhotoUris(d.photoUris ?? [])
+            setEditingPlanifieId(d.editingPlanifieId ?? null)
+            setSelectedCompanionIds(new Set(d.selectedCompanionIds ?? []))
+            setSelectedWishlistId(d.selectedWishlistId ?? null)
+          } catch {}
+        }
+      }
+      draftReadyRef.current = true
+    }
+    restoreDraft()
+  }, [])
+
+  // Sauvegarde le brouillon à chaque changement, pour survivre à un changement d'onglet.
+  useEffect(() => {
+    if (!draftReadyRef.current) return
+    const draft = {
+      intitule, lieu, dateIso, commentaire, noteGlobale, ratings, conseilVivement,
+      statut, categorie, visibilite, photoUris, editingPlanifieId,
+      selectedCompanionIds: [...selectedCompanionIds], selectedWishlistId,
+    }
+    AsyncStorage.setItem(RATE_DRAFT_KEY, JSON.stringify(draft)).catch(() => {})
+  }, [intitule, lieu, dateIso, commentaire, noteGlobale, ratings, conseilVivement, statut, categorie, visibilite, photoUris, editingPlanifieId, selectedCompanionIds, selectedWishlistId])
 
   useEffect(() => {
     loadPlanifiedDates()
@@ -163,6 +210,37 @@ export default function Rate() {
     setPickerVisible(false)
   }
 
+  function resetForm() {
+    setIntitule('')
+    setLieu('')
+    setDateIso(todayIso())
+    setCommentaire('')
+    setNoteGlobale(10)
+    setRatings(DEFAULT_RATINGS)
+    setConseilVivement(false)
+    setStatut('vecu')
+    setCategorie(null)
+    setVisibilite('friends')
+    setPhotoUris([])
+    setEditingPlanifieId(null)
+    setSelectedCompanionIds(new Set())
+    setSelectedWishlistId(null)
+    AsyncStorage.removeItem(RATE_DRAFT_KEY).catch(() => {})
+  }
+
+  function confirmResetForm() {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Réinitialiser le formulaire ? Toutes les informations saisies seront effacées.')) {
+        resetForm()
+      }
+      return
+    }
+    Alert.alert('Réinitialiser le formulaire ?', 'Toutes les informations saisies seront effacées.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Réinitialiser', style: 'destructive', onPress: resetForm },
+    ])
+  }
+
   function clearSource() {
     setEditingPlanifieId(null)
     setSelectedWishlistId(null)
@@ -250,20 +328,7 @@ export default function Rate() {
       return
     }
 
-    setIntitule('')
-    setLieu('')
-    setDateIso(todayIso())
-    setCommentaire('')
-    setNoteGlobale(10)
-    setRatings({ mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 })
-    setConseilVivement(false)
-    setStatut('vecu')
-    setCategorie(null)
-    setVisibilite('friends')
-    setPhotoUris([])
-    setEditingPlanifieId(null)
-    setSelectedCompanionIds(new Set())
-    setSelectedWishlistId(null)
+    resetForm()
 
     toastStore.set('Date enregistré avec succès ✓')
     router.replace('/(tabs)/feed')
@@ -571,6 +636,14 @@ export default function Rate() {
               {saving && !uploadingPhotos ? 'Enregistrement...' : 'Enregistrer le date'}
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={confirmResetForm}
+            disabled={saving || uploadingPhotos}
+          >
+            <Text style={styles.resetButtonText}>Réinitialiser le formulaire</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -671,6 +744,8 @@ const styles = StyleSheet.create({
   conseilSubtext: { fontSize: 12, color: '#888' },
   button: { backgroundColor: '#D4517E', borderRadius: 14, padding: 17, alignItems: 'center', marginTop: 4, shadowColor: '#D4517E', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  resetButton: { alignItems: 'center', padding: 14, marginTop: 8 },
+  resetButtonText: { color: '#888', fontWeight: '600', fontSize: 14 },
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
   uploadCard: { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 260, gap: 10 },
   uploadTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45', marginTop: 4 },

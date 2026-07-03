@@ -84,3 +84,62 @@ update date_ideas set categorie = 'autre' where categorie in ('Cocooning', 'IA')
 -- Réponses aux commentaires : parent_id pointe vers le commentaire auquel on répond.
 -- null = commentaire de premier niveau.
 alter table date_comments add column if not exists parent_id uuid references date_comments(id) on delete cascade;
+
+-- Sécurité : le token push est un secret d'appareil, pas une donnée de profil public.
+-- RLS ne filtre pas par colonne, donc même une policy "select using (true)" sur
+-- profiles exposerait ce token à tout utilisateur connecté qui lit un profil. On
+-- verrouille donc l'accès à la colonne elle-même : seul le service_role (utilisé par
+-- les edge functions notify-*) peut encore la lire ; l'app cliente ne doit plus jamais
+-- faire de .select('expo_push_token') sur un autre utilisateur que soi-même.
+revoke select (expo_push_token) on profiles from authenticated;
+revoke select (expo_push_token) on profiles from anon;
+
+-- Consentement CGU/politique de confidentialité (écran /consent), horodaté pour preuve.
+alter table profiles add column if not exists terms_accepted_at timestamptz default null;
+
+-- Date de naissance, utilisée uniquement pour vérifier l'âge minimum à l'inscription
+-- (16 ans, seuil de consentement RGPD pour le traitement de données par un mineur).
+alter table profiles add column if not exists date_naissance date default null;
+
+-- Blocage d'utilisateurs : masque leur contenu (feed, recherche, invitations) et les
+-- empêche d'interagir. Asymétrique (A bloque B n'implique pas que B bloque A), donc
+-- une table dédiée plutôt qu'un statut sur "friends" qui mélangerait les deux notions.
+create table if not exists user_blocks (
+  id uuid default gen_random_uuid() primary key,
+  blocker_id uuid references profiles(id) on delete cascade not null,
+  blocked_id uuid references profiles(id) on delete cascade not null,
+  created_at timestamptz default now() not null,
+  unique(blocker_id, blocked_id)
+);
+alter table user_blocks enable row level security;
+create policy "blocks_select_own" on user_blocks for select using (auth.uid() = blocker_id);
+create policy "blocks_insert_own" on user_blocks for insert with check (auth.uid() = blocker_id);
+create policy "blocks_delete_own" on user_blocks for delete using (auth.uid() = blocker_id);
+
+-- Signalements de profils, pour modération manuelle (via le SQL editor / dashboard).
+-- Un utilisateur ne peut créer et lire que ses propres signalements ; la lecture pour
+-- modération se fait avec le service_role, en dehors de l'app cliente.
+create table if not exists user_reports (
+  id uuid default gen_random_uuid() primary key,
+  reporter_id uuid references profiles(id) on delete cascade not null,
+  reported_id uuid references profiles(id) on delete cascade not null,
+  reason text not null,
+  context text,
+  created_at timestamptz default now() not null
+);
+alter table user_reports enable row level security;
+create policy "reports_insert_own" on user_reports for insert with check (auth.uid() = reporter_id);
+create policy "reports_select_own" on user_reports for select using (auth.uid() = reporter_id);
+
+-- Rate limiting basique pour les edge functions exposées aux utilisateurs authentifiés
+-- (notify-comment, notify-reaction, notify-social) : empêche un compte de déclencher
+-- un flot de notifications en boucle. Compteur par (user_id, fonction) remis à zéro
+-- toutes les minutes côté fonction (voir lib/rateLimit.ts dans supabase/functions/_shared).
+create table if not exists rate_limits (
+  key text primary key,
+  count int not null default 1,
+  window_start timestamptz not null default now()
+);
+alter table rate_limits enable row level security;
+-- Aucune policy select/insert/update pour les rôles anon/authenticated : uniquement
+-- accessible via le service_role utilisé par les edge functions.

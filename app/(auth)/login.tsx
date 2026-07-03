@@ -76,6 +76,10 @@ export default function Login() {
           <Link href="/(auth)/signup" style={styles.link}>
             <Text>Pas encore de compte ? Inscris-toi</Text>
           </Link>
+
+          <Link href="/delete-account-info" style={styles.deleteLink}>
+            <Text>Supprimer mon compte</Text>
+          </Link>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -96,4 +100,5 @@ const styles = StyleSheet.create({
   success: { color: '#3B6D11', textAlign: 'center', marginBottom: 8 },
   forgotLink: { alignSelf: 'center', marginTop: 14 },
   forgotText: { color: '#D4517E', fontSize: 13, fontWeight: '500' },
+  deleteLink: { alignSelf: 'center', marginTop: 18, color: '#B8A9A0', fontSize: 12 },
 })

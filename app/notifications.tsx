@@ -26,6 +26,7 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
+  const [filter, setFilter] = useState<'all' | 'reaction' | 'comment' | 'mention'>('all')
   const router = useRouter()
   const lastSeenAtOpenRef = useRef<string | null>(null)
 
@@ -170,12 +171,29 @@ export default function Notifications() {
         <View style={{ width: 80 }} />
       </View>
 
+      <View style={styles.filterRow}>
+        {([
+          { key: 'all', label: 'Toutes' },
+          { key: 'reaction', label: '❤️ Likes' },
+          { key: 'comment', label: '💬 Commentaires' },
+          { key: 'mention', label: '📣 Mentions' },
+        ] as const).map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
+            onPress={() => setFilter(f.key)}
+          >
+            <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
-          data={notifs}
+          data={filter === 'all' ? notifs : notifs.filter((n) => n.type === filter)}
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -228,6 +246,11 @@ const styles = StyleSheet.create({
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
   content: { padding: 20, paddingBottom: 60 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12, flexWrap: 'wrap' },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
+  filterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
+  filterChipText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
+  filterChipTextActive: { color: '#fff', fontWeight: '700' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 10 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },

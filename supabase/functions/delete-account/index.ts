@@ -38,12 +38,14 @@ Deno.serve(async (req) => {
     await supabase.from('date_reactions').delete().in('date_id', dateIds)
     await supabase.from('date_comments').delete().in('date_id', dateIds)
     await supabase.from('user_favorites').delete().in('date_id', dateIds)
+    await supabase.from('date_favorites').delete().in('date_id', dateIds)
   }
 
   // Ce que cet utilisateur a laissé sur les dates des autres
   await supabase.from('date_reactions').delete().eq('user_id', user.id)
   await supabase.from('date_comments').delete().eq('user_id', user.id)
   await supabase.from('user_favorites').delete().eq('user_id', user.id)
+  await supabase.from('date_favorites').delete().eq('user_id', user.id)
   await supabase.from('date_participants').delete().eq('user_id', user.id)
   await supabase.from('date_partner_ratings').delete().eq('partner_id', user.id)
 

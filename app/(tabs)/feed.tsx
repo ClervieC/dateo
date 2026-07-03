@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, Image, ScrollView, ActivityIndicator,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { NotificationBell } from '../../lib/NotificationBell'
 import { supabase } from '../../lib/supabase'
 import { webContentStyle } from '../../lib/webStyles'
@@ -13,6 +14,7 @@ import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 
 const PAGE_SIZE = 20
+const FEED_CACHE_KEY = 'feedCache'
 
 type FeedItem = {
   id: string
@@ -39,6 +41,7 @@ export default function Feed() {
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [showingOffline, setShowingOffline] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -52,6 +55,7 @@ export default function Feed() {
   const allowedIdsRef = useRef<string[]>([])
   const partnerIdRef = useRef<string | null>(null)
   const pageRef = useRef(0)
+  const fetchErrorRef = useRef(false)
   const toastAnim = useRef(new Animated.Value(0)).current
   const router = useRouter()
 
@@ -66,16 +70,24 @@ export default function Feed() {
   }
 
   async function fetchFriendIds(userId: string): Promise<string[]> {
-    const [{ data: friendships }, { data: coupleRow }] = await Promise.all([
+    const [{ data: friendships }, { data: coupleRow }, { data: blockedByMe }, { data: blockedMe }] = await Promise.all([
       supabase.from('friends').select('user_id, friend_id').or(`user_id.eq.${userId},friend_id.eq.${userId}`).eq('status', 'accepted'),
       supabase.from('couples').select('user1_id, user2_id').or(`user1_id.eq.${userId},user2_id.eq.${userId}`).eq('status', 'accepted').maybeSingle(),
+      supabase.from('user_blocks').select('blocked_id').eq('blocker_id', userId),
+      supabase.from('user_blocks').select('blocker_id').eq('blocked_id', userId),
     ])
     const friendIds = (friendships ?? []).map((f: any) => f.user_id === userId ? f.friend_id : f.user_id)
     const partnerIds: string[] = coupleRow
       ? [coupleRow.user1_id === userId ? coupleRow.user2_id : coupleRow.user1_id]
       : []
     partnerIdRef.current = partnerIds[0] ?? null
-    return [...new Set([userId, ...friendIds, ...partnerIds])]
+    // Blocage bidirectionnel : ni les personnes que j'ai bloquées, ni celles qui m'ont
+    // bloqué, ne doivent apparaître dans mon feed.
+    const blocked = new Set([
+      ...(blockedByMe ?? []).map((b: any) => b.blocked_id),
+      ...(blockedMe ?? []).map((b: any) => b.blocker_id),
+    ])
+    return [...new Set([userId, ...friendIds, ...partnerIds])].filter((uid) => !blocked.has(uid))
   }
 
   async function enrichWithCounts(
@@ -124,7 +136,7 @@ export default function Feed() {
       .order('created_at', { ascending: false })
       .range(from, to)
 
-    if (error) { setLoadError(true); return [] }
+    if (error) { setLoadError(true); fetchErrorRef.current = true; return [] }
     if (!data) return []
 
     const raw = data.map((d: any) => ({
@@ -155,8 +167,10 @@ export default function Feed() {
   const loadFeed = useCallback(async () => {
     setLoading(true)
     setLoadError(false)
+    setShowingOffline(false)
     setHasMore(true)
     pageRef.current = 0
+    fetchErrorRef.current = false
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
@@ -166,7 +180,21 @@ export default function Feed() {
     allowedIdsRef.current = ids
 
     const page = await fetchPage(ids, 0, user.id)
+
+    if (fetchErrorRef.current) {
+      // Échec probable de connexion : on retombe sur le dernier feed mis en cache.
+      const cached = await AsyncStorage.getItem(FEED_CACHE_KEY)
+      if (cached) {
+        setItems(JSON.parse(cached))
+        setShowingOffline(true)
+        setHasMore(false)
+        setLoading(false)
+        return
+      }
+    }
+
     setItems(page)
+    AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(page.slice(0, PAGE_SIZE))).catch(() => {})
     if (page.length < PAGE_SIZE) setHasMore(false)
     setLoading(false)
 
@@ -233,14 +261,14 @@ export default function Feed() {
       await supabase.from('date_reactions').delete().eq('date_id', item.id).eq('user_id', myId)
     } else {
       await supabase.from('date_reactions').insert({ date_id: item.id, user_id: myId })
-      // Notifier le propriétaire du date
+      // Notifier le propriétaire du date : la edge function relit la réaction en base
+      // et dérive elle-même le destinataire/texte, le client n'envoie que l'id du date.
       const { data: { session } } = await supabase.auth.getSession()
       if (session && item.user_id !== myId) {
-        const { data: me } = await supabase.from('profiles').select('username').eq('id', myId).single()
         fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-reaction`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ date_owner_id: item.user_id, reactor_username: me?.username, date_intitule: item.intitule ?? item.lieu }),
+          body: JSON.stringify({ date_id: item.id }),
         })
       }
     }
@@ -298,7 +326,16 @@ export default function Feed() {
               {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
             </View>
 
-            {loadError && (
+            {showingOffline && (
+              <View style={styles.offlineBanner}>
+                <Text style={styles.offlineBannerText}>📡 Hors ligne — affichage du dernier feed enregistré</Text>
+                <TouchableOpacity onPress={loadFeed}>
+                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {loadError && !showingOffline && (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>Impossible de charger le feed. Vérifie ta connexion.</Text>
                 <TouchableOpacity onPress={loadFeed}>
@@ -529,6 +566,8 @@ const styles = StyleSheet.create({
   errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
   errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
+  offlineBanner: { backgroundColor: '#FFF3D6', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  offlineBannerText: { color: '#8A6A1D', fontSize: 13, flex: 1 },
   catFilter: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
   catFilterActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
   catFilterText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },

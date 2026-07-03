@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Image, Share } from 'react-native'
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Image, Share, Modal, Platform } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -7,6 +7,14 @@ import { supabase } from '../../lib/supabase'
 import { formaterDate } from '../../lib/dateUtils'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
+
+const REPORT_REASONS = [
+  'Harcèlement ou comportement abusif',
+  'Contenu inapproprié',
+  'Spam ou faux compte',
+  'Usurpation d\'identité',
+  'Autre',
+]
 
 type DateRow = {
   id: string
@@ -28,12 +36,55 @@ export default function UserProfile() {
   const [viewer, setViewer] = useState<{ photos: string[]; index: number } | null>(null)
   const [profileNotFound, setProfileNotFound] = useState(false)
   const [datesLoadError, setDatesLoadError] = useState(false)
+  const [myId, setMyId] = useState('')
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [blockSaving, setBlockSaving] = useState(false)
+  const [reportSaving, setReportSaving] = useState(false)
+  const [reportSent, setReportSent] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     if (!id) return
     loadProfile(id)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      setMyId(user.id)
+      supabase.from('user_blocks').select('id').eq('blocker_id', user.id).eq('blocked_id', id).maybeSingle()
+        .then(({ data }) => setIsBlocked(!!data))
+    })
   }, [id])
+
+  async function toggleBlock() {
+    if (!myId || !id || blockSaving) return
+    setBlockSaving(true)
+    setMenuOpen(false)
+    if (isBlocked) {
+      await supabase.from('user_blocks').delete().eq('blocker_id', myId).eq('blocked_id', id)
+      setIsBlocked(false)
+    } else {
+      await supabase.from('user_blocks').insert({ blocker_id: myId, blocked_id: id })
+      // Le blocage rompt aussi une relation d'amitié existante, dans les deux sens.
+      await supabase.from('friends').delete().or(
+        `and(user_id.eq.${myId},friend_id.eq.${id}),and(user_id.eq.${id},friend_id.eq.${myId})`
+      )
+      setIsBlocked(true)
+    }
+    setBlockSaving(false)
+  }
+
+  async function submitReport(reason: string) {
+    if (!myId || !id || reportSaving) return
+    setReportSaving(true)
+    await supabase.from('user_reports').insert({ reporter_id: myId, reported_id: id, reason })
+    setReportSaving(false)
+    setReportSent(true)
+    setTimeout(() => {
+      setReportOpen(false)
+      setReportSent(false)
+    }, 1200)
+  }
 
   async function loadProfile(userId: string) {
     setLoading(true)
@@ -90,10 +141,54 @@ export default function UserProfile() {
           <Ionicons name="chevron-back" size={20} color="#D4517E" />
           <Text style={styles.back}>Retour</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => Share.share({ message: `Regarde le profil de @${username} sur Dateo !` })} style={styles.shareBtn}>
-          <Ionicons name="share-outline" size={22} color="#D4517E" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          <TouchableOpacity onPress={() => Share.share({ message: `Regarde le profil de @${username} sur Dateo !` })} style={styles.shareBtn}>
+            <Ionicons name="share-outline" size={22} color="#D4517E" />
+          </TouchableOpacity>
+          {myId && myId !== id && (
+            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.shareBtn}>
+              <Ionicons name="ellipsis-horizontal" size={22} color="#D4517E" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOpen(false)}>
+          <View style={styles.menuCard}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setReportOpen(true) }}>
+              <Ionicons name="flag-outline" size={18} color="#5C4A45" />
+              <Text style={styles.menuItemText}>Signaler ce profil</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={toggleBlock} disabled={blockSaving}>
+              <Ionicons name={isBlocked ? 'lock-open-outline' : 'ban-outline'} size={18} color="#D85A30" />
+              <Text style={[styles.menuItemText, { color: '#D85A30' }]}>
+                {blockSaving ? '...' : isBlocked ? 'Débloquer' : 'Bloquer cet utilisateur'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setReportOpen(false)}>
+          <View style={styles.menuCard}>
+            {reportSent ? (
+              <Text style={styles.reportSentText}>Signalement envoyé, merci.</Text>
+            ) : (
+              <>
+                <Text style={styles.reportTitle}>Pourquoi signaler @{username} ?</Text>
+                {REPORT_REASONS.map((reason) => (
+                  <TouchableOpacity key={reason} style={styles.menuItem} onPress={() => submitReport(reason)} disabled={reportSaving}>
+                    <Text style={styles.menuItemText}>{reason}</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
@@ -254,4 +349,11 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 40 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
   emptySubtext: { fontSize: 13, color: '#888', marginTop: 6, textAlign: 'center', lineHeight: 18 },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  menuCard: { backgroundColor: '#fff', borderRadius: 16, padding: 8, width: '100%', maxWidth: 340 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12 },
+  menuItemText: { fontSize: 14, color: '#5C4A45', fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: '#F0D9D9', marginVertical: 4 },
+  reportTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45', padding: 12, paddingBottom: 4 },
+  reportSentText: { fontSize: 14, color: '#3B6D11', fontWeight: '600', textAlign: 'center', padding: 20 },
 })

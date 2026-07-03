@@ -39,6 +39,7 @@ export default function Settings() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [exportingCSV, setExportingCSV] = useState(false)
+  const [exportingJSON, setExportingJSON] = useState(false)
   const [deleteMsg, setDeleteMsg] = useState('')
 
   const router = useRouter()
@@ -227,6 +228,54 @@ export default function Settings() {
     setExportingCSV(false)
   }
 
+  // Export RGPD complet (droit d'accès / portabilité, art. 15 et 20) : contrairement
+  // au CSV ci-dessus (pensé pour un tableur, limité aux dates notés), celui-ci reprend
+  // l'intégralité des données personnelles stockées, tables annexes comprises.
+  async function exportFullData() {
+    setExportingJSON(true)
+
+    const [
+      { data: profile },
+      { data: dates },
+      { data: comments },
+      { data: reactions },
+      { data: dateFavorites },
+      { data: ideaFavorites },
+      { data: wishlist },
+      { data: partnerRatings },
+      { data: couples },
+      { data: friends },
+    ] = await Promise.all([
+      supabase.from('profiles').select('id, username, avatar_url, ville, monthly_goal').eq('id', userId).single(),
+      supabase.from('dates').select('*, ratings(*), date_photos(photo_url, ordre), date_participants(user_id)').eq('user_id', userId),
+      supabase.from('date_comments').select('*').eq('user_id', userId),
+      supabase.from('date_reactions').select('*').eq('user_id', userId),
+      supabase.from('date_favorites').select('*').eq('user_id', userId),
+      supabase.from('user_favorites').select('*').eq('user_id', userId),
+      supabase.from('wishlist_lieux').select('*').eq('user_id', userId),
+      supabase.from('date_partner_ratings').select('*').eq('partner_id', userId),
+      supabase.from('couples').select('*').or(`user1_id.eq.${userId},user2_id.eq.${userId}`),
+      supabase.from('friends').select('*').or(`user_id.eq.${userId},friend_id.eq.${userId}`),
+    ])
+
+    const payload = {
+      export_genere_le: new Date().toISOString(),
+      profil: { ...profile, email },
+      dates,
+      commentaires: comments,
+      reactions,
+      dates_favorites: dateFavorites,
+      idees_favorites: ideaFavorites,
+      lieux_a_essayer: wishlist,
+      notes_partenaire: partnerRatings,
+      relations_couple: couples,
+      amis: friends,
+    }
+
+    await Share.share({ message: JSON.stringify(payload, null, 2), title: 'Mes données Dateo (export complet)' })
+    setExportingJSON(false)
+  }
+
   async function execDeleteAccount() {
     setDeletingAccount(true)
     setDeleteMsg('')
@@ -400,10 +449,34 @@ export default function Settings() {
         <View style={styles.section}>
           <TouchableOpacity style={styles.plainRow} onPress={exportCSV} disabled={exportingCSV}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.fieldLabel}>Exporter mes données</Text>
-              <Text style={styles.hint}>Télécharge tous tes dates au format CSV</Text>
+              <Text style={styles.fieldLabel}>Exporter mes dates (CSV)</Text>
+              <Text style={styles.hint}>Tableau de tes dates notés, pour un tableur</Text>
             </View>
             {exportingCSV ? <ActivityIndicator color="#D4517E" /> : <Ionicons name="download-outline" size={20} color="#D4517E" />}
+          </TouchableOpacity>
+          <View style={styles.rowDivider} />
+          <TouchableOpacity style={styles.plainRow} onPress={exportFullData} disabled={exportingJSON}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Export complet de mes données</Text>
+              <Text style={styles.hint}>Toutes tes données personnelles au format JSON (RGPD)</Text>
+            </View>
+            {exportingJSON ? <ActivityIndicator color="#D4517E" /> : <Ionicons name="download-outline" size={20} color="#D4517E" />}
+          </TouchableOpacity>
+          <View style={styles.rowDivider} />
+          <TouchableOpacity style={styles.plainRow} onPress={() => router.push('/privacy')}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Politique de confidentialité</Text>
+              <Text style={styles.hint}>Quelles données sont collectées et pourquoi</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#B8A9A0" />
+          </TouchableOpacity>
+          <View style={styles.rowDivider} />
+          <TouchableOpacity style={styles.plainRow} onPress={() => router.push('/terms')}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Conditions d'utilisation</Text>
+              <Text style={styles.hint}>CGU du service</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#B8A9A0" />
           </TouchableOpacity>
         </View>
 

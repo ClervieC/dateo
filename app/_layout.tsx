@@ -173,14 +173,20 @@ export default function RootLayout() {
     return watchNotifications(session.user.id)
   }, [session?.user.id])
 
+  // Routes accessibles sans être connecté, en plus de (auth)/* — ex: la page
+  // d'instructions de suppression de compte, exigée par les stores même pour un
+  // utilisateur qui ne peut pas/plus se connecter.
+  const PUBLIC_ROUTES = ['delete-account-info', 'privacy', 'terms']
+
   useEffect(() => {
     if (loading) return
 
     const segmentList = segments as string[]
     const inAuthGroup = segmentList[0] === '(auth)'
+    const isPublicRoute = PUBLIC_ROUTES.includes(segmentList[0])
     const screen = segmentList[1]
 
-    if (!session && !inAuthGroup) {
+    if (!session && !inAuthGroup && !isPublicRoute) {
       router.replace('/(auth)/login')
       return
     }
@@ -196,6 +202,21 @@ export default function RootLayout() {
             router.replace('/(tabs)/feed')
           } else {
             router.replace('/(auth)/username')
+          }
+        })
+    }
+
+    // Bloque l'accès au reste de l'app tant que les CGU n'ont pas été acceptées
+    // (ex: compte créé avant l'introduction de cet écran de consentement), mais laisse
+    // passer les pages qu'on doit justement pouvoir consulter depuis l'écran de consentement.
+    if (session && !inAuthGroup && segmentList[0] !== 'consent' && !isPublicRoute) {
+      supabase.from('profiles')
+        .select('terms_accepted_at')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data }) => {
+          if (data && !data.terms_accepted_at) {
+            router.replace('/consent')
           }
         })
     }

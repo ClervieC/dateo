@@ -5,23 +5,25 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET')!
 const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret' }
 
-// Réservé au cron planifié (voir Database > Cron dans le dashboard Supabase) :
-// exige le header x-cron-secret pour empêcher un tiers de déclencher l'envoi de push
-// à tous les utilisateurs en appelant directement l'URL de la fonction.
+// À appeler une fois par jour (cron) : relance les dates planifiés dont la date est
+// passée depuis au moins 1 jour et qui n'ont toujours pas été notés.
+// Réservé au cron : exige le header x-cron-secret pour empêcher un tiers de
+// déclencher l'envoi de push à tous les utilisateurs en appelant l'URL directement.
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.headers.get('x-cron-secret') !== CRON_SECRET) return json({ error: 'Non autorisé' })
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-  const today = new Date()
-  const dateStr = today.toISOString().slice(0, 10)
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const dateStr = yesterday.toISOString().slice(0, 10)
 
   const { data: dates } = await supabase
     .from('dates')
-    .select('user_id, intitule, lieu')
-    .eq('date_du_date', dateStr)
+    .select('id, user_id, intitule, lieu')
     .eq('statut', 'planifie')
+    .lte('date_du_date', dateStr)
 
   if (!dates || dates.length === 0) return json({ ok: true, sent: 0 })
 
@@ -46,8 +48,8 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: token,
-        title: "📅 Ce soir c'est date !",
-        body: `"${lieu}" — Comment ça s'est passé ? N'oublie pas de noter ton date 🌹`,
+        title: '✍️ Comment c\'était ?',
+        body: `N'oublie pas de noter "${lieu}"`,
         sound: 'default',
       }),
     })

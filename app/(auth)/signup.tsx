@@ -4,11 +4,24 @@ import { Link, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { usernameValide } from '../../lib/friendsUtils'
 import { webFormStyle, webAuthCardStyle } from '../../lib/webStyles'
+import { DatePicker } from '../../lib/DatePicker'
+
+const MIN_AGE = 16
+
+function computeAge(birthdateIso: string): number {
+  const [y, m, d] = birthdateIso.split('-').map(Number)
+  const today = new Date()
+  let age = today.getFullYear() - y
+  const hasHadBirthdayThisYear = today.getMonth() + 1 > m || (today.getMonth() + 1 === m && today.getDate() >= d)
+  if (!hasHadBirthdayThisYear) age--
+  return age
+}
 
 export default function Signup() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [dateNaissance, setDateNaissance] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const router = useRouter()
@@ -19,6 +32,15 @@ export default function Signup() {
     const validation = usernameValide(username)
     if (!validation.valide) {
       setError(validation.message ?? 'Pseudo invalide')
+      return
+    }
+
+    if (!dateNaissance) {
+      setError('Indique ta date de naissance')
+      return
+    }
+    if (computeAge(dateNaissance) < MIN_AGE) {
+      setError(`Tu dois avoir au moins ${MIN_AGE} ans pour utiliser Dateo`)
       return
     }
 
@@ -47,7 +69,7 @@ export default function Signup() {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ username: username.trim() })
+        .update({ username: username.trim(), date_naissance: dateNaissance })
         .eq('id', data.user.id)
 
       setSaving(false)
@@ -97,6 +119,9 @@ export default function Signup() {
             onChangeText={setPassword}
             secureTextEntry
           />
+          <View style={styles.datePickerWrap}>
+            <DatePicker value={dateNaissance} onChange={setDateNaissance} placeholder="Date de naissance" />
+          </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -123,6 +148,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: '600', color: '#D4517E', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
+  datePickerWrap: { marginBottom: 12 },
   button: { backgroundColor: '#D4517E', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   link: { marginTop: 20, alignSelf: 'center' },

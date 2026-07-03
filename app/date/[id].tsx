@@ -386,12 +386,12 @@ export default function DateDetail() {
 
     if (parentId) setSendingReply(true)
     else setSendingComment(true)
-    const { error } = await supabase.from('date_comments').insert({
+    const { data: inserted, error } = await supabase.from('date_comments').insert({
       date_id: id,
       user_id: userId,
       content: text,
       parent_id: parentId,
-    })
+    }).select('id').single()
     if (parentId) setSendingReply(false)
     else setSendingComment(false)
 
@@ -409,43 +409,16 @@ export default function DateDetail() {
     await loadComments(id)
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100)
 
+    // La edge function relit le commentaire en base pour vérifier son auteur et
+    // dériver elle-même les destinataires (propriétaire, réponse, mentions) et le
+    // texte des notifications : le client n'envoie que l'id du commentaire créé.
     const { data: { session } } = await supabase.auth.getSession()
-    const { data: me } = await supabase.from('profiles').select('username').eq('id', userId).single()
-    if (!session || !me) return
-    const accessToken = session.access_token
-
-    const notified = new Set<string>([userId])
-
-    async function notify(targetId: string, type: 'comment' | 'reply' | 'mention') {
-      if (notified.has(targetId)) return
-      notified.add(targetId)
+    if (session && inserted) {
       fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-comment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({
-          date_owner_id: targetId,
-          commenter_username: me!.username,
-          date_intitule: detail?.intitule ?? detail?.lieu,
-          comment_preview: text.slice(0, 80),
-          type,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ comment_id: inserted.id }),
       })
-    }
-
-    // Notifier l'auteur du commentaire parent (réponse)
-    if (parentId) {
-      const parentComment = comments.find((c) => c.id === parentId)
-      if (parentComment) await notify(parentComment.user_id, 'reply')
-    }
-
-    // Notifier le propriétaire du date
-    if (detail) await notify(detail.user_id, 'comment')
-
-    // Notifier les personnes mentionnées avec @username
-    const mentionedUsernames = [...new Set([...text.matchAll(/@(\w{1,30})/g)].map((m) => m[1]))]
-    if (mentionedUsernames.length > 0) {
-      const { data: mentioned } = await supabase.from('profiles').select('id, username').in('username', mentionedUsernames)
-      for (const p of mentioned ?? []) await notify(p.id, 'mention')
     }
   }
 
