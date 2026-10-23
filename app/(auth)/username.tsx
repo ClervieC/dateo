@@ -8,6 +8,7 @@ import { FormField } from '../../lib/FormField'
 import { AuthScreen, authStyles } from '../../lib/AuthScreen'
 import { useUsernameCheck } from '../../lib/useUsernameCheck'
 import { t } from '../../lib/i18n'
+import { C } from '../../lib/theme'
 
 export default function UsernameSetup() {
   const [username, setUsername] = useState('')
@@ -59,8 +60,8 @@ export default function UsernameSetup() {
         error={error || (check.status === 'taken' || (check.status === 'invalid' && username.trim().length >= 3) ? check.message : undefined)}
         hint={hint}
         right={check.status === 'checking'
-          ? <ActivityIndicator size="small" color="#D4517E" />
-          : check.status === 'available' ? <Ionicons name="checkmark-circle" size={20} color="#3B6D11" /> : null}
+          ? <ActivityIndicator size="small" color={C.primary} />
+          : check.status === 'available' ? <Ionicons name="checkmark-circle" size={20} color={C.success} /> : null}
       />
 
       <TouchableOpacity
@@ -68,7 +69,7 @@ export default function UsernameSetup() {
         onPress={handleSave}
         disabled={saving}
       >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Continuer")}</Text>}
+        {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={authStyles.buttonText}>{t("Continuer")}</Text>}
       </TouchableOpacity>
     </AuthScreen>
   )

@@ -6,6 +6,7 @@ import { FormField } from '../../lib/FormField'
 import { AuthScreen, authStyles } from '../../lib/AuthScreen'
 import { MIN_PASSWORD_LENGTH, traduireErreurAuth } from '../../lib/authErrors'
 import { t } from '../../lib/i18n'
+import { C } from '../../lib/theme'
 
 // Atteint via le lien « Mot de passe oublié » (événement PASSWORD_RECOVERY) :
 // l'utilisateur a une session temporaire et doit choisir un nouveau mot de passe.
@@ -60,7 +61,7 @@ export default function ResetPassword() {
       />
       {error ? <Text style={authStyles.formError}>{error}</Text> : null}
       <TouchableOpacity style={[authStyles.button, saving && authStyles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Enregistrer")}</Text>}
+        {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={authStyles.buttonText}>{t("Enregistrer")}</Text>}
       </TouchableOpacity>
     </AuthScreen>
   )

@@ -7,13 +7,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { NotificationBell } from '../../lib/NotificationBell'
 import { supabase } from '../../lib/supabase'
 import { webContentStyle } from '../../lib/webStyles'
-import { formaterDate } from '../../lib/dateUtils'
+import { formaterDate, formatNote } from '../../lib/dateUtils'
+import { LikeButton } from '../../lib/LikeButton'
+import { SkeletonList } from '../../lib/Skeleton'
+import { hapticSelect } from '../../lib/haptics'
 import { toastStore } from '../../lib/toastStore'
 import { feedBadgeStore } from '../../lib/feedBadgeStore'
 import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { useBottomTabs } from '../../lib/useBottomTabs'
-import { t } from '../../lib/i18n'
+import { t, tn } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 const PAGE_SIZE = 20
 const FEED_CACHE_KEY = 'feedCache'
@@ -357,18 +361,18 @@ export default function Feed() {
                 <Text style={styles.anniversaryText}>
                   {t("🎉 Il y a un an : {nom}", { nom: anniversaries[0].name })}{anniversaries.length > 1 ? ` (+${anniversaries.length - 1})` : ''}
                 </Text>
-                <Ionicons name="chevron-forward" size={14} color="#D4517E" />
+                <Ionicons name="chevron-forward" size={14} color={C.primary} />
               </TouchableOpacity>
             )}
 
             <View style={styles.searchBar}>
-              <Ionicons name="search" size={15} color="#B8A9A0" />
+              <Ionicons name="search" size={15} color={C.faint} />
               <TextInput
                 style={styles.searchInput}
                 value={feedSearch}
                 onChangeText={setFeedSearch}
                 placeholder={t("Rechercher un lieu, un ami...")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
                 clearButtonMode="while-editing"
               />
             </View>
@@ -404,7 +408,8 @@ export default function Feed() {
           >
             {item.conseil_vivement && (
               <View style={styles.conseilBanner}>
-                <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
+                <Ionicons name="heart" size={12} color={C.primaryText} />
+                <Text style={styles.conseilBannerText}>{t("Conseillé vivement")}</Text>
               </View>
             )}
             <View style={styles.cardHeader}>
@@ -424,21 +429,26 @@ export default function Feed() {
                   {item.username}{item.user_id === myId ? t(" · Toi") : ''}
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.note}>{item.note_globale}/20</Text>
+              <View style={styles.notePill}>
+                <Text style={styles.note}>{formatNote(item.note_globale)}<Text style={styles.noteSuffix}>/20</Text></Text>
+              </View>
             </View>
 
             {item.intitule ? (
               <>
                 <View style={styles.lieuRow}>
                   <Text style={styles.lieu}>{item.intitule}</Text>
-                  {item.visibilite === 'private' && <Ionicons name="lock-closed" size={14} color="#B8A9A0" style={{ marginTop: 2 }} />}
+                  {item.visibilite === 'private' && <Ionicons name="lock-closed" size={14} color={C.faint} style={{ marginTop: 2 }} />}
                 </View>
-                <Text style={styles.lieuAddress}>📍 {item.lieu}</Text>
+                <View style={styles.iconLine}>
+                  <Ionicons name="location-outline" size={13} color={C.muted} />
+                  <Text style={styles.lieuAddress}>{item.lieu}</Text>
+                </View>
               </>
             ) : (
               <View style={styles.lieuRow}>
                 <Text style={styles.lieu}>{item.lieu}</Text>
-                {item.visibilite === 'private' && <Ionicons name="lock-closed" size={14} color="#B8A9A0" style={{ marginTop: 2 }} />}
+                {item.visibilite === 'private' && <Ionicons name="lock-closed" size={14} color={C.faint} style={{ marginTop: 2 }} />}
               </View>
             )}
             <View style={styles.dateMeta}>
@@ -452,7 +462,8 @@ export default function Feed() {
 
             {item.participants.length > 0 && (
               <View style={styles.participantsRow}>
-                <Text style={styles.participantsLabel}>{t("👥 Avec")}</Text>
+                <Ionicons name="people-outline" size={13} color={C.text} />
+                <Text style={styles.participantsLabel}>{t("Avec")}</Text>
                 {item.participants.map((p, idx) => (
                   <TouchableOpacity key={p.id} onPress={() => navigateToUser(p.id)}>
                     <Text style={styles.participantLink}>
@@ -464,13 +475,20 @@ export default function Feed() {
             )}
 
             {item.photos.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
-                {item.photos.map((url, idx) => (
-                  <TouchableOpacity key={idx} onPress={() => setViewer({ photos: item.photos, index: idx })} activeOpacity={0.9}>
-                    <Image source={{ uri: url }} style={styles.feedPhoto} />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <TouchableOpacity
+                style={styles.heroPhotoWrap}
+                onPress={() => setViewer({ photos: item.photos, index: 0 })}
+                activeOpacity={0.92}
+                accessibilityLabel={tn(item.photos.length, "Voir la photo", "Voir les {n} photos")}
+              >
+                <Image source={{ uri: item.photos[0] }} style={styles.heroPhoto} resizeMode="cover" />
+                {item.photos.length > 1 && (
+                  <View style={styles.photoCount}>
+                    <Ionicons name="images-outline" size={13} color="#fff" />
+                    <Text style={styles.photoCountText}>{item.photos.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             )}
 
             {item.commentaire ? (
@@ -478,52 +496,46 @@ export default function Feed() {
             ) : null}
 
             <View style={styles.actionsRow}>
-              <TouchableOpacity
-                style={styles.reactionRow}
-                onPress={() => toggleReaction(item)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={item.myReaction ? 'heart' : 'heart-outline'}
-                  size={20}
-                  color={item.myReaction ? '#D4517E' : '#B8A9A0'}
-                />
-                {item.reactionCount > 0 && (
-                  <Text style={[styles.reactionCount, item.myReaction && styles.reactionCountActive]}>
-                    {item.reactionCount}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <LikeButton liked={item.myReaction} count={item.reactionCount} onPress={() => toggleReaction(item)} size={22} />
               <TouchableOpacity
                 style={styles.commentRow}
                 onPress={() => router.push(`/date/${item.id}`)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="chatbubble-outline" size={18} color="#B8A9A0" />
+                <Ionicons name="chatbubble-outline" size={18} color={C.faint} />
                 {item.commentCount > 0 && (
                   <Text style={styles.commentCount}>{item.commentCount}</Text>
                 )}
               </TouchableOpacity>
               <View style={{ flex: 1 }} />
-              <TouchableOpacity onPress={() => toggleFavorite(item.id)} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={() => { hapticSelect(); toggleFavorite(item.id) }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={myFavorites.has(item.id) ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+              >
                 <Ionicons
                   name={myFavorites.has(item.id) ? 'bookmark' : 'bookmark-outline'}
                   size={20}
-                  color={myFavorites.has(item.id) ? '#D4517E' : '#B8A9A0'}
+                  color={myFavorites.has(item.id) ? C.primary : C.faint}
                 />
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
         )}
         ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator color="#D4517E" style={{ marginVertical: 20 }} />
+          loading && items.length === 0 ? (
+            <SkeletonList count={3} withPhoto />
+          ) : loadingMore ? (
+            <ActivityIndicator color={C.primary} style={{ marginVertical: 20 }} />
           ) : null
         }
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>💌</Text>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="heart-outline" size={30} color={C.primaryText} />
+              </View>
               <Text style={styles.emptyText}>{t("Ton feed est encore vide")}</Text>
               <Text style={styles.emptySubtext}>{t("Note ton premier date ou ajoute des amis pour voir les leurs ici")}</Text>
               <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/(tabs)/rate')}>
@@ -558,65 +570,73 @@ export default function Feed() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  container: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: C.bg },
   content: { padding: 20, paddingBottom: 60 },
-  title: { fontSize: 24, fontWeight: '600', color: '#D4517E' },
+  title: { fontSize: 28, fontWeight: '800', color: C.primaryText, letterSpacing: -0.3 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   bellBtn: { padding: 4 },
-  anniversaryBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FDE8F0', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F4C0D1' },
-  anniversaryText: { fontSize: 13, fontWeight: '600', color: '#D4517E', flex: 1 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#F0D9D9', gap: 8, marginBottom: 10 },
-  searchInput: { flex: 1, fontSize: 14, color: '#5C4A45', padding: 0 },
+  anniversaryBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.primarySoft, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: C.primaryBorder },
+  anniversaryText: { fontSize: 13, fontWeight: '600', color: C.primaryText, flex: 1 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: C.border, gap: 8, marginBottom: 10 },
+  searchInput: { flex: 1, fontSize: 14, color: C.text, padding: 0 },
   catFilterRow: { marginBottom: 16, flexGrow: 0, minWidth: 0 },
-  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
-  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
-  offlineBanner: { backgroundColor: '#FFF3D6', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  offlineBannerText: { color: '#8A6A1D', fontSize: 13, flex: 1 },
-  catFilter: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  catFilterActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  catFilterText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
-  catFilterTextActive: { color: '#fff', fontWeight: '700' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  cardConseille: { borderColor: '#D4517E', borderWidth: 1.5 },
-  conseilBanner: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 10, alignSelf: 'flex-start' },
-  conseilBannerText: { fontSize: 12, fontWeight: '700', color: '#D4517E' },
+  errorBanner: { backgroundColor: C.errorBg, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: C.errorText, fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
+  offlineBanner: { backgroundColor: C.warningBg, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  offlineBannerText: { color: C.warningText, fontSize: 13, flex: 1 },
+  catFilter: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  catFilterActive: { backgroundColor: C.primary, borderColor: C.primary },
+  catFilterText: { fontSize: 12, color: C.text, fontWeight: '500' },
+  catFilterTextActive: { color: C.onPrimary, fontWeight: '700' },
+  card: { backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: C.border },
+  cardConseille: { borderColor: C.primary, borderWidth: 1.5 },
+  conseilBanner: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.primarySoft, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 9, marginBottom: 10, alignSelf: 'flex-start' },
+  conseilBannerText: { fontSize: 12, fontWeight: '700', color: C.primaryText },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 12, fontWeight: '700', color: '#D4517E' },
-  username: { fontSize: 14, fontWeight: '600', color: '#D4517E' },
-  note: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
+  avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: C.border },
+  avatarPlaceholder: { width: 28, height: 28, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 12, fontWeight: '700', color: C.primaryText },
+  username: { fontSize: 14, fontWeight: '600', color: C.primaryText },
+  note: { fontSize: 16, fontWeight: '700', color: C.primaryText },
   lieuRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  lieu: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginTop: 2 },
-  lieuAddress: { fontSize: 12, color: '#888', marginTop: 1 },
-  date: { fontSize: 12, color: '#888', marginTop: 2 },
-  comment: { fontSize: 14, color: '#5C4A45', marginTop: 8, lineHeight: 20 },
+  lieu: { fontSize: 16, fontWeight: '600', color: C.text, marginTop: 2 },
+  lieuAddress: { fontSize: 12, color: C.muted },
+  iconLine: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  notePill: { backgroundColor: C.primarySoft, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4 },
+  noteSuffix: { fontSize: 12, fontWeight: '600', color: C.faint },
+  heroPhotoWrap: { marginTop: 12, borderRadius: 14, overflow: 'hidden', backgroundColor: C.border },
+  heroPhoto: { width: '100%', aspectRatio: 4 / 3 },
+  photoCount: { position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
+  photoCountText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  emptyIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  date: { fontSize: 12, color: C.muted, marginTop: 2 },
+  comment: { fontSize: 14, color: C.text, marginTop: 8, lineHeight: 20 },
   photoRow: { marginTop: 10, marginBottom: 4, minWidth: 0 },
-  feedPhoto: { width: 160, height: 160, borderRadius: 10, marginRight: 8, backgroundColor: '#F0D9D9' },
+  feedPhoto: { width: 160, height: 160, borderRadius: 10, marginRight: 8, backgroundColor: C.border },
   actionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 16 },
   reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  reactionCount: { fontSize: 13, color: '#B8A9A0', fontWeight: '600' },
-  reactionCountActive: { color: '#D4517E' },
+  reactionCount: { fontSize: 13, color: C.faint, fontWeight: '600' },
+  reactionCountActive: { color: C.primaryText },
   commentRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  commentCount: { fontSize: 13, color: '#B8A9A0', fontWeight: '600' },
+  commentCount: { fontSize: 13, color: C.faint, fontWeight: '600' },
   dateMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  catChip: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  participantsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  participantsLabel: { fontSize: 12, color: '#5C4A45' },
-  participantLink: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
-  catChipText: { fontSize: 11, color: '#D4517E', fontWeight: '600' },
+  catChip: { backgroundColor: C.primarySoft, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  participantsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 },
+  participantsLabel: { fontSize: 12, color: C.text, marginRight: 2 },
+  participantLink: { fontSize: 12, color: C.primaryText, fontWeight: '600' },
+  catChipText: { fontSize: 11, color: C.primaryText, fontWeight: '600' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
-  emptySubtext: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 20, textAlign: 'center', paddingHorizontal: 24 },
-  emptyButton: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
-  emptyButtonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: C.text },
+  emptySubtext: { fontSize: 13, color: C.muted, marginTop: 4, marginBottom: 20, textAlign: 'center', paddingHorizontal: 24 },
+  emptyButton: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  emptyButtonText: { color: C.onPrimary, fontWeight: '600', fontSize: 15 },
   emptyButtonSecondary: { marginTop: 10, paddingVertical: 10, paddingHorizontal: 24 },
-  emptyButtonSecondaryText: { color: '#D4517E', fontWeight: '600', fontSize: 15 },
+  emptyButtonSecondaryText: { color: C.primaryText, fontWeight: '600', fontSize: 15 },
   toast: { position: 'absolute', bottom: 32, left: 24, right: 24, backgroundColor: '#2D6A2D', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 3 }, shadowRadius: 8, elevation: 6 },
-  toastText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-})
+  toastText: { color: C.onPrimary, fontWeight: '600', fontSize: 15 },
+}))

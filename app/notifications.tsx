@@ -10,6 +10,7 @@ import { webContentStyle } from '../lib/webStyles'
 import { NOTIF_LAST_SEEN_KEY, markNotificationsSeen } from '../lib/notifications'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t, tn } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 const NOTIF_READ_IDS_KEY = 'notifReadIds'
 
@@ -181,18 +182,18 @@ export default function Notifications() {
         <View style={styles.requestsBox}>
           {pendingFriends > 0 && (
             <TouchableOpacity style={styles.requestRow} onPress={() => router.push('/friends')}>
-              <Ionicons name="person-add" size={18} color="#D4517E" />
+              <Ionicons name="person-add" size={18} color={C.primary} />
               <Text style={styles.requestText}>
                 {tn(pendingFriends, "{n} demande d'ami en attente", "{n} demandes d'ami en attente")}
               </Text>
-              <Ionicons name="chevron-forward" size={16} color="#D4517E" />
+              <Ionicons name="chevron-forward" size={16} color={C.primary} />
             </TouchableOpacity>
           )}
           {pendingCouple && (
             <TouchableOpacity style={styles.requestRow} onPress={() => router.push('/couple')}>
-              <Ionicons name="heart" size={18} color="#D4517E" />
+              <Ionicons name="heart" size={18} color={C.primary} />
               <Text style={styles.requestText}>{t("Invitation en mode couple à accepter")}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#D4517E" />
+              <Ionicons name="chevron-forward" size={16} color={C.primary} />
             </TouchableOpacity>
           )}
         </View>
@@ -200,9 +201,9 @@ export default function Notifications() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {([
           { key: 'all', label: t("Toutes") },
-          { key: 'reaction', label: t("❤️ Likes") },
-          { key: 'comment', label: t("💬 Commentaires") },
-          { key: 'mention', label: t("📣 Mentions") },
+          { key: 'reaction', label: t("Likes") },
+          { key: 'comment', label: t("Commentaires") },
+          { key: 'mention', label: t("Mentions") },
         ] as const).map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -216,7 +217,7 @@ export default function Notifications() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
@@ -224,7 +225,7 @@ export default function Notifications() {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>🔔</Text>
+              <View style={styles.emptyIconCircle}><Ionicons name="notifications-outline" size={28} color={C.primaryText} /></View>
               <Text style={styles.emptyText}>{t("Aucune notification")}</Text>
               <Text style={styles.emptySub}>{t("Les likes et commentaires sur tes dates apparaîtront ici")}</Text>
             </View>
@@ -242,7 +243,7 @@ export default function Notifications() {
                   <Ionicons
                     name={item.type === 'reaction' ? 'heart' : item.type === 'mention' ? 'at' : 'chatbubble'}
                     size={18}
-                    color="#D4517E"
+                    color={C.primary}
                   />
                 </View>
                 <View style={styles.body}>
@@ -256,7 +257,7 @@ export default function Notifications() {
                   )}
                   <Text style={styles.time}>{formaterIlYa(item.created_at)}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#D0C5C0" />
+                <Ionicons name="chevron-forward" size={16} color={C.borderStrong} />
               </TouchableOpacity>
             )
           }}
@@ -266,33 +267,34 @@ export default function Notifications() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  emptyIconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
   filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 2 },
-  requestsBox: { marginHorizontal: 20, marginTop: 12, backgroundColor: '#FDE8F0', borderRadius: 12, overflow: 'hidden' },
+  requestsBox: { marginHorizontal: 20, marginTop: 12, backgroundColor: C.primarySoft, borderRadius: 12, overflow: 'hidden' },
   requestRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
-  requestText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#D4517E' },
-  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  filterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  filterChipText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
-  filterChipTextActive: { color: '#fff', fontWeight: '700' },
+  requestText: { flex: 1, fontSize: 14, fontWeight: '600', color: C.primaryText },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  filterChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  filterChipText: { fontSize: 12, color: C.text, fontWeight: '500' },
+  filterChipTextActive: { color: C.onPrimary, fontWeight: '700' },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 10 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
-  emptySub: { fontSize: 13, color: '#888', textAlign: 'center', paddingHorizontal: 40, lineHeight: 18 },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9', gap: 12 },
-  cardUnread: { backgroundColor: '#FFF8FA', borderColor: '#F4C0D1' },
-  unreadDot: { position: 'absolute', top: 12, left: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4517E' },
-  iconCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: C.text, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: C.muted, textAlign: 'center', paddingHorizontal: 40, lineHeight: 18 },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border, gap: 12 },
+  cardUnread: { backgroundColor: C.bgAlt, borderColor: C.primaryBorder },
+  unreadDot: { position: 'absolute', top: 12, left: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  iconCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   body: { flex: 1 },
-  notifText: { fontSize: 14, color: '#5C4A45', lineHeight: 20 },
-  actor: { fontWeight: '700', color: '#D4517E' },
+  notifText: { fontSize: 14, color: C.text, lineHeight: 20 },
+  actor: { fontWeight: '700', color: C.primaryText },
   dateName: { fontWeight: '600' },
-  preview: { fontSize: 13, color: '#888', marginTop: 2, fontStyle: 'italic' },
-  time: { fontSize: 11, color: '#B8A9A0', marginTop: 4 },
-})
+  preview: { fontSize: 13, color: C.muted, marginTop: 2, fontStyle: 'italic' },
+  time: { fontSize: 11, color: C.faint, marginTop: 4 },
+}))

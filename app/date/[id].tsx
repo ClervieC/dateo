@@ -7,10 +7,12 @@ import { supabase } from '../../lib/supabase'
 import { formaterDate, formatNote, formaterIlYa } from '../../lib/dateUtils'
 import { ScreenHeader } from '../../lib/ScreenHeader'
 import { CRITERES } from '../../lib/criteres'
+import { LikeButton } from '../../lib/LikeButton'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { getCategoryLabel } from '../../lib/categories'
 import { t } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 
 type DateDetail = {
@@ -25,7 +27,7 @@ type DateDetail = {
   user_id: string
   username: string
   photos: string[]
-  ratings: Record<string, number> | null
+  ratings: Record<string, number | null> | null
   categorie: string | null
   visibilite: string
   participants: { id: string; username: string }[]
@@ -68,7 +70,6 @@ export default function DateDetail() {
   const [partnerCommentInput, setPartnerCommentInput] = useState('')
   const [savingPartnerNote, setSavingPartnerNote] = useState(false)
   const myIdRef = useRef('')
-  const heartAnim = useRef(new Animated.Value(1)).current
   const router = useRouter()
   const scrollRef = useRef<ScrollView>(null)
 
@@ -146,10 +147,6 @@ export default function DateDetail() {
     setMyReaction(!wasReacted)
     setReactionCount((c) => wasReacted ? c - 1 : c + 1)
 
-    Animated.sequence([
-      Animated.timing(heartAnim, { toValue: 1.3, duration: 120, useNativeDriver: true }),
-      Animated.timing(heartAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-    ]).start()
 
     if (wasReacted) {
       await supabase.from('date_reactions').delete().eq('date_id', id).eq('user_id', userId)
@@ -358,7 +355,7 @@ export default function DateDetail() {
               value={replyText}
               onChangeText={setReplyText}
               placeholder={t("Répondre à @{username}...", { username: c.username })}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               multiline
               maxLength={500}
               autoFocus
@@ -368,7 +365,7 @@ export default function DateDetail() {
               onPress={() => sendComment(replyText, c.id)}
               disabled={sendingReply || !replyText.trim()}
             >
-              {sendingReply ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-up" size={18} color="#fff" />}
+              {sendingReply ? <ActivityIndicator size="small" color={C.onPrimary} /> : <Ionicons name="arrow-up" size={18} color={C.onPrimary} />}
             </TouchableOpacity>
           </View>
         )}
@@ -463,13 +460,13 @@ export default function DateDetail() {
         bordered={false}
         right={detail ? (
           <TouchableOpacity onPress={handleShare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Partager")}>
-            <Ionicons name="share-outline" size={22} color="#D4517E" />
+            <Ionicons name="share-outline" size={22} color={C.primary} />
           </TouchableOpacity>
         ) : null}
       />
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : !detail ? (
         <View style={styles.notFound}>
           <Text style={styles.notFoundIcon}>🔍</Text>
@@ -484,7 +481,8 @@ export default function DateDetail() {
           <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, webContentStyle]}>
             {detail.conseil_vivement && (
               <View style={styles.conseilBanner}>
-                <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
+                <Ionicons name="heart" size={13} color={C.primaryText} />
+                <Text style={styles.conseilBannerText}>{t("Conseillé vivement")}</Text>
               </View>
             )}
 
@@ -492,14 +490,17 @@ export default function DateDetail() {
               <>
                 <View style={styles.lieuRow}>
                   <Text style={styles.lieu}>{detail.intitule}</Text>
-                  {detail.visibilite === 'private' && <Ionicons name="lock-closed" size={16} color="#B8A9A0" style={{ marginTop: 4 }} />}
+                  {detail.visibilite === 'private' && <Ionicons name="lock-closed" size={16} color={C.faint} style={{ marginTop: 4 }} />}
                 </View>
-                <Text style={styles.lieuAddress}>📍 {detail.lieu}</Text>
+                <View style={styles.iconLine}>
+                  <Ionicons name="location-outline" size={14} color={C.muted} />
+                  <Text style={styles.lieuAddress}>{detail.lieu}</Text>
+                </View>
               </>
             ) : (
               <View style={styles.lieuRow}>
                 <Text style={styles.lieu}>{detail.lieu}</Text>
-                {detail.visibilite === 'private' && <Ionicons name="lock-closed" size={16} color="#B8A9A0" style={{ marginTop: 4 }} />}
+                {detail.visibilite === 'private' && <Ionicons name="lock-closed" size={16} color={C.faint} style={{ marginTop: 4 }} />}
               </View>
             )}
             <TouchableOpacity
@@ -526,14 +527,15 @@ export default function DateDetail() {
                 }}
                 style={styles.mapBtn}
               >
-                <Ionicons name="map-outline" size={14} color="#D4517E" />
+                <Ionicons name="map-outline" size={14} color={C.primary} />
                 <Text style={styles.mapBtnText}>{t("Carte")}</Text>
               </TouchableOpacity>
             </View>
 
             {detail.participants.length > 0 && (
               <View style={styles.participantsRow}>
-                <Text style={styles.participantsLabel}>{t("👥 Avec")}</Text>
+                <Ionicons name="people-outline" size={14} color={C.text} />
+                <Text style={styles.participantsLabel}>{t("Avec")}</Text>
                 {detail.participants.map((p, idx) => (
                   <TouchableOpacity
                     key={p.id}
@@ -549,7 +551,8 @@ export default function DateDetail() {
 
             {detail.statut === 'planifie' || detail.note_globale == null ? (
               <View style={styles.planifieBox}>
-                <Text style={styles.planifieTitle}>{t("📅 Date à venir")}</Text>
+                <Ionicons name="calendar" size={22} color={C.primaryText} />
+                <Text style={styles.planifieTitle}>{t("Date à venir")}</Text>
                 <Text style={styles.planifieSub}>
                   {detail.user_id === myId ? t("Tu pourras le noter une fois passé.") : t("Pas encore noté.")}
                 </Text>
@@ -572,7 +575,7 @@ export default function DateDetail() {
                       },
                     } as any)}
                   >
-                    <Ionicons name="chatbubbles-outline" size={15} color="#D4517E" />
+                    <Ionicons name="chatbubbles-outline" size={15} color={C.primary} />
                     <Text style={styles.planifieLinkText}>{t("Préparer des sujets de conversation")}</Text>
                   </TouchableOpacity>
                 )}
@@ -615,7 +618,7 @@ export default function DateDetail() {
                       value={partnerCommentInput}
                       onChangeText={setPartnerCommentInput}
                       placeholder={t("Mon commentaire (optionnel)...")}
-                      placeholderTextColor="#B8A9A0"
+                      placeholderTextColor={C.faint}
                       multiline
                     />
                     <View style={styles.partnerBtnRow}>
@@ -659,11 +662,11 @@ export default function DateDetail() {
               </View>
             ) : null}
 
-            {detail.ratings && detail.statut !== 'planifie' && (
+            {detail.ratings && detail.statut !== 'planifie' && CRITERES.some((c) => detail.ratings![c.key] != null) && (
               <View style={styles.ratingsSection}>
                 <Text style={styles.ratingsTitle}>{t("Détails")}</Text>
-                {CRITERES.map((c) => {
-                  const val = detail.ratings![c.key] ?? 0
+                {CRITERES.filter((c) => detail.ratings![c.key] != null).map((c) => {
+                  const val = detail.ratings![c.key] as number
                   return (
                     <View key={c.key} style={styles.critereRow}>
                       <View style={styles.critereLeft}>
@@ -678,18 +681,15 @@ export default function DateDetail() {
             )}
 
             {/* Likes */}
-            <TouchableOpacity style={styles.likesRow} onPress={toggleReaction} activeOpacity={0.7}>
-              <Animated.View style={{ transform: [{ scale: heartAnim }] }}>
-                <Ionicons
-                  name={myReaction ? 'heart' : 'heart-outline'}
-                  size={26}
-                  color={myReaction ? '#D4517E' : '#B8A9A0'}
-                />
-              </Animated.View>
-              <Text style={[styles.likesCount, myReaction && styles.likesCountActive]}>
-                {reactionCount > 0 ? t("{n} j'aime", { n: reactionCount }) : t("J'aime")}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.likesRow}>
+              <LikeButton
+                liked={myReaction}
+                count={reactionCount}
+                onPress={toggleReaction}
+                size={26}
+                label={reactionCount > 0 ? t("{n} j'aime", { n: reactionCount }) : t("J'aime")}
+              />
+            </View>
 
             {/* Commentaires */}
             <View style={styles.commentsSection}>
@@ -730,7 +730,7 @@ export default function DateDetail() {
                     value={commentText}
                     onChangeText={handleCommentTextChange}
                     placeholder={t("Ajoute un commentaire... (@ pour mentionner)")}
-                    placeholderTextColor="#B8A9A0"
+                    placeholderTextColor={C.faint}
                     multiline
                     maxLength={500}
                   />
@@ -739,7 +739,7 @@ export default function DateDetail() {
                     onPress={() => sendComment()}
                     disabled={sendingComment || !commentText.trim()}
                   >
-                    {sendingComment ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-up" size={18} color="#fff" />}
+                    {sendingComment ? <ActivityIndicator size="small" color={C.onPrimary} /> : <Ionicons name="arrow-up" size={18} color={C.onPrimary} />}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -763,80 +763,81 @@ export default function DateDetail() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
   notFound: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
   notFoundIcon: { fontSize: 40, marginBottom: 12 },
-  notFoundTitle: { fontSize: 17, fontWeight: '700', color: '#5C4A45' },
-  notFoundSub: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 6, marginBottom: 20, lineHeight: 20 },
-  notFoundBtn: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
-  notFoundBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  planifieBox: { backgroundColor: '#FDE8F0', borderRadius: 16, padding: 16, marginBottom: 20, alignItems: 'center' },
-  planifieTitle: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
-  planifieSub: { fontSize: 13, color: '#5C4A45', marginTop: 4 },
-  planifieBtn: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 20, marginTop: 12 },
-  planifieBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  notFoundTitle: { fontSize: 17, fontWeight: '700', color: C.text },
+  notFoundSub: { fontSize: 14, color: C.muted, textAlign: 'center', marginTop: 6, marginBottom: 20, lineHeight: 20 },
+  notFoundBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  notFoundBtnText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  planifieBox: { backgroundColor: C.primarySoft, borderRadius: 16, padding: 16, marginBottom: 20, alignItems: 'center' },
+  planifieTitle: { fontSize: 16, fontWeight: '700', color: C.primaryText },
+  planifieSub: { fontSize: 13, color: C.text, marginTop: 4 },
+  planifieBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 20, marginTop: 12 },
+  planifieBtnText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
   planifieLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, padding: 4 },
-  planifieLinkText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
+  planifieLinkText: { color: C.primaryText, fontWeight: '600', fontSize: 13 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
   backBtn: { flexDirection: 'row', alignItems: 'center' },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
   shareBtn: { padding: 4 },
-  shareText: { color: '#D4517E', fontSize: 14, fontWeight: '600' },
+  shareText: { color: C.primaryText, fontSize: 14, fontWeight: '600' },
   content: { padding: 20, paddingBottom: 60 },
-  error: { color: '#888', textAlign: 'center', marginTop: 60 },
-  conseilBanner: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, alignSelf: 'flex-start', marginBottom: 16 },
-  conseilBannerText: { fontSize: 13, fontWeight: '700', color: '#D4517E' },
+  error: { color: C.muted, textAlign: 'center', marginTop: 60 },
+  iconLine: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  conseilBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primarySoft, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, alignSelf: 'flex-start', marginBottom: 16 },
+  conseilBannerText: { fontSize: 13, fontWeight: '700', color: C.primaryText },
   lieuRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lieu: { fontSize: 26, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
-  lieuAddress: { fontSize: 14, color: '#888', marginBottom: 6 },
-  metaUsername: { fontSize: 14, fontWeight: '600', color: '#D4517E', marginBottom: 2 },
+  lieu: { fontSize: 26, fontWeight: '700', color: C.text, marginBottom: 4 },
+  lieuAddress: { fontSize: 14, color: C.muted, marginBottom: 6 },
+  metaUsername: { fontSize: 14, fontWeight: '600', color: C.primaryText, marginBottom: 2 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
-  meta: { fontSize: 13, color: '#888' },
-  catBadge: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  catBadgeText: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
-  participantsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -12, marginBottom: 20 },
-  participantsLabel: { fontSize: 13, color: '#5C4A45' },
-  participantLink: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
-  noteGlobaleBox: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9', alignItems: 'center' },
-  noteGlobaleLabel: { fontSize: 13, color: '#888', marginBottom: 4 },
-  noteGlobaleValue: { fontSize: 52, fontWeight: '800', color: '#D4517E', lineHeight: 60 },
-  noteGlobaleSuffix: { fontSize: 22, fontWeight: '500', color: '#B8A9A0' },
+  meta: { fontSize: 13, color: C.muted },
+  catBadge: { backgroundColor: C.primarySoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  catBadgeText: { fontSize: 12, color: C.primaryText, fontWeight: '600' },
+  participantsRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: -12, marginBottom: 20 },
+  participantsLabel: { fontSize: 13, color: C.text },
+  participantLink: { fontSize: 13, color: C.primaryText, fontWeight: '600' },
+  noteGlobaleBox: { backgroundColor: C.card, borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  noteGlobaleLabel: { fontSize: 13, color: C.muted, marginBottom: 4 },
+  noteGlobaleValue: { fontSize: 52, fontWeight: '800', color: C.primaryText, lineHeight: 60 },
+  noteGlobaleSuffix: { fontSize: 22, fontWeight: '500', color: C.faint },
   photoRow: { marginBottom: 20, minWidth: 0 },
-  photo: { width: 240, height: 240, borderRadius: 14, marginRight: 12, backgroundColor: '#F0D9D9' },
-  commentBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9' },
-  commentLabel: { fontSize: 12, color: '#888', fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  comment: { fontSize: 15, color: '#5C4A45', lineHeight: 22 },
-  ratingsSection: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F0D9D9', marginBottom: 20 },
-  ratingsTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  photo: { width: 240, height: 240, borderRadius: 14, marginRight: 12, backgroundColor: C.border },
+  commentBox: { backgroundColor: C.card, borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: C.border },
+  commentLabel: { fontSize: 12, color: C.muted, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  comment: { fontSize: 15, color: C.text, lineHeight: 22 },
+  ratingsSection: { backgroundColor: C.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
+  ratingsTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
   critereRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   critereLeft: { flex: 1, marginRight: 12 },
-  critereLabel: { fontSize: 13, color: '#5C4A45', fontWeight: '500', marginBottom: 5 },
-  barTrack: { flexDirection: 'row', height: 6, backgroundColor: '#F0D9D9', borderRadius: 3, overflow: 'hidden' },
-  barFill: { backgroundColor: '#D4517E', borderRadius: 3 },
-  critereValue: { fontSize: 13, fontWeight: '700', color: '#D4517E', width: 32, textAlign: 'right' },
-  likesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  likesCount: { fontSize: 15, fontWeight: '600', color: '#B8A9A0' },
-  likesCountActive: { color: '#D4517E' },
-  commentsSection: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  commentsTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
-  commentsEmpty: { fontSize: 13, color: '#B8A9A0', marginBottom: 12 },
-  commentCard: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+  critereLabel: { fontSize: 13, color: C.text, fontWeight: '500', marginBottom: 5 },
+  barTrack: { flexDirection: 'row', height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' },
+  barFill: { backgroundColor: C.primary, borderRadius: 3 },
+  critereValue: { fontSize: 13, fontWeight: '700', color: C.primaryText, width: 32, textAlign: 'right' },
+  likesRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.border },
+  likesCount: { fontSize: 15, fontWeight: '600', color: C.faint },
+  likesCountActive: { color: C.primaryText },
+  commentsSection: { backgroundColor: C.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border },
+  commentsTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
+  commentsEmpty: { fontSize: 13, color: C.faint, marginBottom: 12 },
+  commentCard: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   commentCardReply: { marginBottom: 8, paddingBottom: 0, borderBottomWidth: 0 },
   commentCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  commentAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#F0D9D9' },
-  commentAvatarPlaceholder: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  commentAvatarInitial: { fontSize: 13, fontWeight: '700', color: '#D4517E' },
-  commentUsername: { fontSize: 13, fontWeight: '600', color: '#D4517E' },
-  commentTime: { fontSize: 11, color: '#B8A9A0' },
-  commentDelete: { fontSize: 18, color: '#B8A9A0', paddingHorizontal: 4 },
-  commentContent: { fontSize: 14, color: '#5C4A45', lineHeight: 20, marginLeft: 38 },
-  commentMention: { color: '#D4517E', fontWeight: '600' },
-  commentReplyBtn: { fontSize: 12, color: '#B8A9A0', fontWeight: '600', marginLeft: 38, marginTop: 4 },
-  replyIndent: { marginLeft: 30, marginTop: 8, marginBottom: 4, borderLeftWidth: 2, borderLeftColor: '#F0D9D9', paddingLeft: 8 },
+  commentAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.border },
+  commentAvatarPlaceholder: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  commentAvatarInitial: { fontSize: 13, fontWeight: '700', color: C.primaryText },
+  commentUsername: { fontSize: 13, fontWeight: '600', color: C.primaryText },
+  commentTime: { fontSize: 11, color: C.faint },
+  commentDelete: { fontSize: 18, color: C.faint, paddingHorizontal: 4 },
+  commentContent: { fontSize: 14, color: C.text, lineHeight: 20, marginLeft: 38 },
+  commentMention: { color: C.primaryText, fontWeight: '600' },
+  commentReplyBtn: { fontSize: 12, color: C.faint, fontWeight: '600', marginLeft: 38, marginTop: 4 },
+  replyIndent: { marginLeft: 30, marginTop: 8, marginBottom: 4, borderLeftWidth: 2, borderLeftColor: C.border, paddingLeft: 8 },
   replyInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 8, marginLeft: 38 },
-  replyInput: { flex: 1, backgroundColor: '#FFF8F5', borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: '#5C4A45', maxHeight: 80 },
-  replySendBtn: { backgroundColor: '#D4517E', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  replyInput: { flex: 1, backgroundColor: C.bg, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: C.text, maxHeight: 80 },
+  replySendBtn: { backgroundColor: C.primary, width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   commentInputWrap: { position: 'relative' },
   mentionDropdown: {
     position: 'absolute',
@@ -844,9 +845,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     marginBottom: 6,
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: '#F0D9D9',
+    borderColor: C.border,
     borderRadius: 10,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -856,36 +857,36 @@ const styles = StyleSheet.create({
     elevation: 6,
     zIndex: 10,
   },
-  mentionItem: { paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
-  mentionItemText: { fontSize: 14, color: '#5C4A45', fontWeight: '600' },
+  mentionItem: { paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  mentionItemText: { fontSize: 14, color: C.text, fontWeight: '600' },
   commentConfirmRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 38, marginTop: 6 },
-  commentConfirmText: { fontSize: 12, color: '#888', flex: 1 },
-  commentConfirmYes: { fontSize: 13, fontWeight: '700', color: '#D85A30' },
-  commentConfirmNo: { fontSize: 13, fontWeight: '600', color: '#5C4A45' },
+  commentConfirmText: { fontSize: 12, color: C.muted, flex: 1 },
+  commentConfirmYes: { fontSize: 13, fontWeight: '700', color: C.danger },
+  commentConfirmNo: { fontSize: 13, fontWeight: '600', color: C.text },
   commentInputRow: { flexDirection: 'row', gap: 8, marginTop: 4, alignItems: 'flex-end' },
-  commentCharCount: { fontSize: 11, color: '#B8A9A0', textAlign: 'right', marginTop: 2 },
-  commentInput: { flex: 1, backgroundColor: '#FFF8F5', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 14, maxHeight: 100 },
-  commentSendBtn: { backgroundColor: '#D4517E', width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
-  commentSendBtnDisabled: { backgroundColor: '#F0D9D9' },
-  commentSendText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  commentErrText: { fontSize: 13, color: '#D85A30', marginBottom: 8 },
-  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#FDE8F0', borderRadius: 8 },
-  mapBtnText: { fontSize: 12, color: '#D4517E', fontWeight: '600' },
-  partnerRatingBox: { backgroundColor: '#FFF4F7', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F4C0D1' },
-  partnerRatingTitle: { fontSize: 13, fontWeight: '700', color: '#D4517E', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
-  partnerNoteValue: { fontSize: 32, fontWeight: '800', color: '#D4517E', marginBottom: 4 },
-  partnerNoteComment: { fontSize: 14, color: '#5C4A45', lineHeight: 20, marginBottom: 8 },
-  partnerEditBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#D4517E' },
-  partnerEditBtnText: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
+  commentCharCount: { fontSize: 11, color: C.faint, textAlign: 'right', marginTop: 2 },
+  commentInput: { flex: 1, backgroundColor: C.bg, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: C.border, fontSize: 14, maxHeight: 100 },
+  commentSendBtn: { backgroundColor: C.primary, width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
+  commentSendBtnDisabled: { backgroundColor: C.border },
+  commentSendText: { color: C.onPrimary, fontWeight: '700', fontSize: 16 },
+  commentErrText: { fontSize: 13, color: C.danger, marginBottom: 8 },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: C.primarySoft, borderRadius: 8 },
+  mapBtnText: { fontSize: 12, color: C.primaryText, fontWeight: '600' },
+  partnerRatingBox: { backgroundColor: C.bgAlt, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: C.primaryBorder },
+  partnerRatingTitle: { fontSize: 13, fontWeight: '700', color: C.primaryText, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  partnerNoteValue: { fontSize: 32, fontWeight: '800', color: C.primaryText, marginBottom: 4 },
+  partnerNoteComment: { fontSize: 14, color: C.text, lineHeight: 20, marginBottom: 8 },
+  partnerEditBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: C.primary },
+  partnerEditBtnText: { fontSize: 13, color: C.primaryText, fontWeight: '600' },
   notePickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  notePill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  notePillActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  notePillText: { fontSize: 13, color: '#5C4A45', fontWeight: '600' },
-  notePillTextActive: { color: '#fff' },
-  partnerCommentInput: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 10, fontSize: 14, marginBottom: 10, minHeight: 60, textAlignVertical: 'top' },
+  notePill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  notePillActive: { backgroundColor: C.primary, borderColor: C.primary },
+  notePillText: { fontSize: 13, color: C.text, fontWeight: '600' },
+  notePillTextActive: { color: C.onPrimary },
+  partnerCommentInput: { backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 10, fontSize: 14, marginBottom: 10, minHeight: 60, textAlignVertical: 'top' },
   partnerBtnRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
-  partnerCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#D0C5C0' },
-  partnerCancelBtnText: { color: '#888', fontSize: 14 },
-  partnerSaveBtn: { backgroundColor: '#D4517E', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 10 },
-  partnerSaveBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-})
+  partnerCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.borderStrong },
+  partnerCancelBtnText: { color: C.muted, fontSize: 14 },
+  partnerSaveBtn: { backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 10 },
+  partnerSaveBtnText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+}))

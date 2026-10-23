@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, FlatList } from 'react
 import { Ionicons } from '@expo/vector-icons'
 import { nomsDesMois } from './dateUtils'
 import { t } from './i18n'
+import { C, themedStyles } from './theme'
 
 const ROW_HEIGHT = 48
 
@@ -78,7 +79,7 @@ export function BirthdateField({ value, onChange, minAge = 0, maxAge = 100, hasE
         accessibilityLabel={`${t("{champ} de naissance", { champ: titles[field].toLowerCase() })}${v !== null ? ` : ${label}` : ''}`}
       >
         <Text style={v === null ? styles.placeholder : styles.value} numberOfLines={1}>{label}</Text>
-        <Ionicons name="chevron-down" size={14} color="#B8A9A0" />
+        <Ionicons name="chevron-down" size={14} color={C.faint} />
       </TouchableOpacity>
     )
   }
@@ -129,7 +130,7 @@ function OptionSheet({ visible, title, options, selected, fallbackValue, onClose
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Fermer")}>
-              <Ionicons name="close" size={22} color="#5C4A45" />
+              <Ionicons name="close" size={22} color={C.text} />
             </TouchableOpacity>
           </View>
           <FlatList
@@ -144,7 +145,7 @@ function OptionSheet({ visible, title, options, selected, fallbackValue, onClose
               return (
                 <TouchableOpacity style={[styles.option, isSel && styles.optionSelected]} onPress={() => onSelect(item.value)}>
                   <Text style={[styles.optionText, isSel && styles.optionTextSelected]}>{item.label}</Text>
-                  {isSel && <Ionicons name="checkmark" size={18} color="#D4517E" />}
+                  {isSel && <Ionicons name="checkmark" size={18} color={C.primary} />}
                 </TouchableOpacity>
               )
             }}
@@ -155,19 +156,19 @@ function OptionSheet({ visible, title, options, selected, fallbackValue, onClose
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: { flexDirection: 'row', gap: 8 },
-  field: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  fieldError: { borderColor: '#D85A30' },
-  placeholder: { fontSize: 15, color: '#B8A9A0', flexShrink: 1 },
-  value: { fontSize: 15, color: '#5C4A45', fontWeight: '500', flexShrink: 1 },
+  field: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 14, borderWidth: 1, borderColor: C.border },
+  fieldError: { borderColor: C.danger },
+  placeholder: { fontSize: 15, color: C.faint, flexShrink: 1 },
+  value: { fontSize: 15, color: C.text, fontWeight: '500', flexShrink: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  sheet: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, width: '100%', maxWidth: 340, maxHeight: '75%' },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
-  sheetTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  sheet: { backgroundColor: C.card, borderRadius: 20, paddingVertical: 12, width: '100%', maxWidth: 340, maxHeight: '75%' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  sheetTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   list: { flexGrow: 0 },
   option: { height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
-  optionSelected: { backgroundColor: '#FDE8F0' },
-  optionText: { fontSize: 16, color: '#5C4A45' },
-  optionTextSelected: { color: '#D4517E', fontWeight: '700' },
-})
+  optionSelected: { backgroundColor: C.primarySoft },
+  optionText: { fontSize: 16, color: C.text },
+  optionTextSelected: { color: C.primaryText, fontWeight: '700' },
+}))

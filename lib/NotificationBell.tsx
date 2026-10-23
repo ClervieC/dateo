@@ -3,6 +3,7 @@ import { Animated, TouchableOpacity, View, StyleSheet, StyleProp, ViewStyle } fr
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { notificationStore } from './notificationStore'
+import { C, themedStyles } from './theme'
 
 type Props = {
   size?: number
@@ -10,7 +11,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function NotificationBell({ size = 22, color = '#D4517E', style }: Props) {
+export function NotificationBell({ size = 22, color = C.primary, style }: Props) {
   const router = useRouter()
   const [hasUnread, setHasUnread] = useState(notificationStore.get())
   const scale = useRef(new Animated.Value(1)).current
@@ -41,7 +42,7 @@ export function NotificationBell({ size = 22, color = '#D4517E', style }: Props)
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   dot: {
     position: 'absolute',
     top: -1,
@@ -49,8 +50,8 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 5,
-    backgroundColor: '#D85A30',
+    backgroundColor: C.danger,
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: C.card,
   },
-})
+}))

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, View, Image, TouchableOpacity, Text, StyleSheet, FlatList, useWindowDimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { C, themedStyles } from './theme'
 
 type Props = {
   photos: string[]
@@ -55,14 +56,14 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose }: Prop
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: { flex: 1, backgroundColor: '#000' },
   page: { justifyContent: 'center', alignItems: 'center' },
   image: {},
   closeBtn: { position: 'absolute', top: 52, right: 20, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  closeText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  counter: { position: 'absolute', top: 56, left: 20, zIndex: 10, color: '#fff', fontSize: 14, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  closeText: { color: C.onPrimary, fontSize: 16, fontWeight: '700' },
+  counter: { position: 'absolute', top: 56, left: 20, zIndex: 10, color: C.onPrimary, fontSize: 14, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   dots: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
-  dotActive: { backgroundColor: '#fff', width: 18 },
-})
+  dotActive: { backgroundColor: C.card, width: 18 },
+}))

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t, tn } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type LeaderEntry = {
   id: string
@@ -78,7 +79,7 @@ export default function Leaderboard() {
       <ScreenHeader fallback="/(tabs)/profile" title={t("Classement")} />
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
@@ -152,30 +153,30 @@ export default function Leaderboard() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
-  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  emptyCta: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
-  subtitle: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
-  rowMe: { borderColor: '#D4517E', borderWidth: 1.5, backgroundColor: '#FFF4F7' },
+  subtitle: { fontSize: 13, color: C.muted, textAlign: 'center', marginBottom: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  rowMe: { borderColor: C.primary, borderWidth: 1.5, backgroundColor: C.bgAlt },
   rowUnranked: { opacity: 0.6 },
-  unrankedTitle: { fontSize: 13, fontWeight: '700', color: '#B8A9A0', marginTop: 8, marginBottom: 10 },
+  unrankedTitle: { fontSize: 13, fontWeight: '700', color: C.faint, marginTop: 8, marginBottom: 10 },
   rank: { fontSize: 22, width: 36, textAlign: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 18, fontWeight: '700', color: '#D4517E' },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.border },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 18, fontWeight: '700', color: C.primaryText },
   info: { flex: 1 },
-  username: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
-  usernameMe: { color: '#D4517E' },
-  meta: { fontSize: 12, color: '#888', marginTop: 2 },
-  score: { fontSize: 18, fontWeight: '700', color: '#D4517E' },
+  username: { fontSize: 15, fontWeight: '600', color: C.text },
+  usernameMe: { color: C.primaryText },
+  meta: { fontSize: 12, color: C.muted, marginTop: 2 },
+  score: { fontSize: 18, fontWeight: '700', color: C.primaryText },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 10 },
-  emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
-})
+  emptyText: { fontSize: 14, color: C.muted, textAlign: 'center' },
+}))

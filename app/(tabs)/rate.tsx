@@ -16,13 +16,17 @@ import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'react-native'
 import { uriToBlob } from '../../lib/uploadImage'
 import { showAlert, confirmAction } from '../../lib/alert'
-import { saveRatings } from '../../lib/ratings'
+import { saveRatings, EMPTY_RATINGS, Ratings } from '../../lib/ratings'
+import { hapticSelect, hapticSuccess } from '../../lib/haptics'
 import { CRITERES } from '../../lib/criteres'
 import { useBottomTabs } from '../../lib/useBottomTabs'
 import { t } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 const RATE_DRAFT_KEY = 'rateFormDraft'
-const DEFAULT_RATINGS = { mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 }
+// Rien n'est pré-noté : une valeur par défaut (10/20, 3/5) fausserait les données
+const DEFAULT_RATINGS = EMPTY_RATINGS
+const clampNote = (v: number) => Math.max(0, Math.min(20, Math.round(v * 4) / 4))
 
 
 type PlanifieDate = {
@@ -50,8 +54,11 @@ export default function Rate() {
   const [lieu, setLieu] = useState(typeof lieuParam === 'string' ? lieuParam : '')
   const [dateIso, setDateIso] = useState(todayIso())
   const [commentaire, setCommentaire] = useState('')
-  const [noteGlobale, setNoteGlobale] = useState(10)
-  const [ratings, setRatings] = useState(DEFAULT_RATINGS)
+  const [noteGlobale, setNoteGlobale] = useState<number | null>(null)
+  const [ratings, setRatings] = useState<Ratings>(DEFAULT_RATINGS)
+  const [showDetails, setShowDetails] = useState(false)
+  const [noteError, setNoteError] = useState('')
+  const noteCardY = useRef(0)
   const [conseilVivement, setConseilVivement] = useState(false)
   const [statut, setStatut] = useState<'vecu' | 'planifie'>('vecu')
   const [categorie, setCategorie] = useState<string | null>(null)
@@ -117,7 +124,7 @@ export default function Rate() {
             setLieu(d.lieu ?? '')
             setDateIso(d.dateIso ?? todayIso())
             setCommentaire(d.commentaire ?? '')
-            setNoteGlobale(d.noteGlobale ?? 10)
+            setNoteGlobale(d.noteGlobale ?? null)
             setRatings(d.ratings ?? DEFAULT_RATINGS)
             setConseilVivement(d.conseilVivement ?? false)
             setStatut(d.statut ?? 'vecu')
@@ -239,8 +246,10 @@ export default function Rate() {
     setLieu('')
     setDateIso(todayIso())
     setCommentaire('')
-    setNoteGlobale(10)
+    setNoteGlobale(null)
     setRatings(DEFAULT_RATINGS)
+    setShowDetails(false)
+    setNoteError('')
     setConseilVivement(false)
     setStatut('vecu')
     setCategorie(null)
@@ -269,7 +278,7 @@ export default function Rate() {
 
   const MAX_PHOTOS = 10
 
-  function updateRating(key: string, value: number) {
+  function updateRating(key: string, value: number | null) {
     setRatings((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -278,6 +287,11 @@ export default function Rate() {
     if (!lieu.trim()) {
       setLieuError(t("Indique le lieu du date"))
       scrollRef.current?.scrollTo({ y: 0, animated: true })
+      return
+    }
+    if (statut === 'vecu' && noteGlobale == null) {
+      setNoteError(t("Donne une note globale à ton date"))
+      scrollRef.current?.scrollTo({ y: Math.max(0, noteCardY.current - 20), animated: true })
       return
     }
 
@@ -294,7 +308,7 @@ export default function Rate() {
       intitule: intitule.trim() || null,
       lieu: lieu.trim(),
       date_du_date: dateIso,
-      note_globale: statut === 'vecu' ? Math.round(noteGlobale * 4) / 4 : null,
+      note_globale: statut === 'vecu' && noteGlobale != null ? clampNote(noteGlobale) : null,
       commentaire,
       conseil_vivement: conseilVivement,
       statut,
@@ -335,6 +349,7 @@ export default function Rate() {
     }
 
     resetForm()
+    hapticSuccess()
 
     toastStore.set(statut === 'vecu' ? t("Date enregistré ✓") : t("Date planifié ✓ Tu pourras le noter une fois passé"))
     router.replace('/(tabs)/feed')
@@ -420,19 +435,19 @@ export default function Rate() {
 
           {!editingPlanifieId && !selectedWishlistId && (planifiedDates.length > 0 || wishlistLieux.length > 0) && (
             <TouchableOpacity style={styles.sourceEntryBtn} onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
-              <Ionicons name="calendar-outline" size={16} color="#D4517E" />
+              <Ionicons name="calendar-outline" size={16} color={C.primary} />
               <Text style={styles.sourceEntryText}>{t("Partir d'un date planifié ou d'un lieu à essayer")}</Text>
-              <Ionicons name="chevron-forward" size={14} color="#B8A9A0" />
+              <Ionicons name="chevron-forward" size={14} color={C.faint} />
             </TouchableOpacity>
           )}
 
           {(editingPlanifieId || selectedWishlistId) && (
             <View style={styles.sourceBadge}>
               <Text style={styles.sourceBadgeText} numberOfLines={1}>
-                {editingPlanifieId ? t("📅 Depuis ton date planifié : {lieu}", { lieu }) : t("📍 Depuis « Lieux à essayer » : {lieu}", { lieu })}
+                {editingPlanifieId ? t("Depuis ton date planifié : {lieu}", { lieu }) : t("Depuis « Lieux à essayer » : {lieu}", { lieu })}
               </Text>
               <TouchableOpacity onPress={clearSource} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={20} color="#D4517E" />
+                <Ionicons name="close-circle" size={20} color={C.primary} />
               </TouchableOpacity>
             </View>
           )}
@@ -440,8 +455,8 @@ export default function Rate() {
           {/* Statut : segmenté plutôt qu'un switch dont le libellé change */}
           <View style={styles.segmented}>
             {([
-              { key: 'vecu', label: t("✓ Déjà vécu") },
-              { key: 'planifie', label: t("📅 À venir") },
+              { key: 'vecu', label: t("Déjà vécu"), icon: 'checkmark-circle' as const },
+              { key: 'planifie', label: t("À venir"), icon: 'calendar' as const },
             ] as const).map((opt) => (
               <TouchableOpacity
                 key={opt.key}
@@ -450,6 +465,7 @@ export default function Rate() {
                 accessibilityRole="button"
                 accessibilityState={{ selected: statut === opt.key }}
               >
+                <Ionicons name={opt.icon} size={16} color={statut === opt.key ? C.onPrimary : C.faint} />
                 <Text style={[styles.segmentText, statut === opt.key && styles.segmentTextActive]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
@@ -466,7 +482,7 @@ export default function Rate() {
             <TextInput
               style={[styles.input, !!lieuError && styles.inputError]}
               placeholder={t("Ex : Le Petit Café, Bucarest")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               value={lieu}
               onChangeText={(v) => { setLieu(v); if (v.trim()) setLieuError('') }}
             />
@@ -476,7 +492,7 @@ export default function Rate() {
             <TextInput
               style={styles.input}
               placeholder={t("Ex : Dîner romantique, Soirée ciné...")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               value={intitule}
               onChangeText={setIntitule}
             />
@@ -512,44 +528,90 @@ export default function Rate() {
 
           {/* Note et détails, uniquement si vécu */}
           {statut === 'vecu' && (
-            <View style={styles.card}>
+            <View style={styles.card} onLayout={(e) => { noteCardY.current = e.nativeEvent.layout.y }}>
               <Text style={styles.cardTitle}>{t("Ta note")}</Text>
 
-              <View style={styles.globalNoteBox}>
+              <View style={[styles.globalNoteBox, !!noteError && styles.globalNoteBoxError]}>
                 <Text style={styles.label}>{t("Note globale")}</Text>
-                <Text style={styles.globalNoteValue}>{formatNote(noteGlobale)}<Text style={styles.globalNoteSuffix}>/20</Text></Text>
+                <View style={styles.noteStepperRow}>
+                  <TouchableOpacity
+                    style={styles.stepBtn}
+                    onPress={() => { hapticSelect(); setNoteError(''); setNoteGlobale((n) => clampNote((n ?? 10.5) - 0.5)) }}
+                    accessibilityLabel={t("Baisser la note")}
+                  >
+                    <Ionicons name="remove" size={22} color={C.primaryText} />
+                  </TouchableOpacity>
+                  <Text style={[styles.globalNoteValue, noteGlobale == null && styles.globalNoteEmpty]}>
+                    {noteGlobale == null ? '–' : formatNote(noteGlobale)}<Text style={styles.globalNoteSuffix}>/20</Text>
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.stepBtn}
+                    onPress={() => { hapticSelect(); setNoteError(''); setNoteGlobale((n) => clampNote((n ?? 9.5) + 0.5)) }}
+                    accessibilityLabel={t("Monter la note")}
+                  >
+                    <Ionicons name="add" size={22} color={C.primaryText} />
+                  </TouchableOpacity>
+                </View>
                 <Slider
                   style={{ width: '100%', height: 40 }}
                   minimumValue={0}
                   maximumValue={20}
                   step={0.25}
-                  value={noteGlobale}
-                  onValueChange={setNoteGlobale}
-                  minimumTrackTintColor="#D4517E"
-                  maximumTrackTintColor="#F0D9D9"
-                  thumbTintColor="#D4517E"
+                  value={noteGlobale ?? 10}
+                  onValueChange={(v) => { setNoteError(''); setNoteGlobale(v) }}
+                  minimumTrackTintColor={noteGlobale == null ? C.border : C.primary}
+                  maximumTrackTintColor={C.border}
+                  thumbTintColor={noteGlobale == null ? C.faint : C.primary}
                 />
+                <Text style={[styles.noteHint, !!noteError && styles.noteHintError]}>
+                  {noteError || (noteGlobale == null ? t("Fais glisser ou utilise − / + pour noter") : ' ')}
+                </Text>
               </View>
 
-              {CRITERES.map((c) => (
-                <View key={c.key} style={styles.critereBox}>
-                  <View style={styles.critereHeader}>
-                    <Text style={styles.label}>{t(c.label)}</Text>
-                    <Text style={styles.critereValue}>{formatNote(ratings[c.key as keyof typeof ratings])}/5</Text>
-                  </View>
-                  <Slider
-                    style={{ width: '100%', height: 36 }}
-                    minimumValue={0}
-                    maximumValue={5}
-                    step={0.25}
-                    value={ratings[c.key as keyof typeof ratings]}
-                    onValueChange={(v) => updateRating(c.key, v)}
-                    minimumTrackTintColor="#D4517E"
-                    maximumTrackTintColor="#F0D9D9"
-                    thumbTintColor="#D4517E"
-                  />
+              <TouchableOpacity
+                style={styles.detailsToggle}
+                onPress={() => setShowDetails((v) => !v)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showDetails }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailsToggleTitle}>{t("Détailler ma note")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
+                  <Text style={styles.detailsToggleSub}>
+                    {t("{n}/{total} critères renseignés", { n: Object.values(ratings).filter((v) => v != null).length, total: CRITERES.length })}
+                  </Text>
                 </View>
-              ))}
+                <Ionicons name={showDetails ? 'chevron-up' : 'chevron-down'} size={20} color={C.faint} />
+              </TouchableOpacity>
+
+              {showDetails && CRITERES.map((c) => {
+                const value = ratings[c.key as keyof Ratings]
+                return (
+                  <View key={c.key} style={styles.critereBox}>
+                    <View style={styles.critereHeader}>
+                      <Text style={styles.label}>{t(c.label)}</Text>
+                      <View style={styles.critereRight}>
+                        <Text style={[styles.critereValue, value == null && styles.critereValueEmpty]}>{value == null ? '–' : formatNote(value)}/5</Text>
+                        {value != null && (
+                          <TouchableOpacity onPress={() => updateRating(c.key, null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Effacer")}>
+                            <Ionicons name="close-circle" size={16} color={C.faint} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                    <Slider
+                      style={{ width: '100%', height: 36 }}
+                      minimumValue={0}
+                      maximumValue={5}
+                      step={0.25}
+                      value={value ?? 2.5}
+                      onValueChange={(v) => updateRating(c.key, v)}
+                      minimumTrackTintColor={value == null ? C.border : C.primary}
+                      maximumTrackTintColor={C.border}
+                      thumbTintColor={value == null ? C.faint : C.primary}
+                    />
+                  </View>
+                )
+              })}
 
               <TouchableOpacity
                 style={[styles.conseilRow, conseilVivement && styles.conseilRowActive]}
@@ -558,16 +620,16 @@ export default function Rate() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.conseilLabel, conseilVivement && styles.conseilLabelActive]}>
-                    {t("💖 Je conseille vivement")}
+                    <Ionicons name="heart" size={14} color={conseilVivement ? C.primaryText : C.text} /> {t("Je conseille vivement")}
                   </Text>
                   <Text style={styles.conseilSubtext}>{t("Mis en avant sur le feed de tes amis")}</Text>
                 </View>
                 <Switch
                   value={conseilVivement}
                   onValueChange={setConseilVivement}
-                  trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
+                  trackColor={{ false: C.border, true: C.primary }}
                   thumbColor="#fff"
-                  ios_backgroundColor="#F0D9D9"
+                  ios_backgroundColor={C.border}
                 />
               </TouchableOpacity>
             </View>
@@ -601,7 +663,7 @@ export default function Rate() {
             <TextInput
               style={[styles.input, styles.textarea]}
               placeholder={t("Raconte ton date...")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               value={commentaire}
               onChangeText={setCommentaire}
               multiline
@@ -631,7 +693,10 @@ export default function Rate() {
           <View style={styles.card}>
             <View style={styles.toggleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>{visibilite === 'friends' ? t("👫 Visible par mes amis") : t("🔒 Privé")}</Text>
+                <View style={styles.toggleLabelRow}>
+                  <Ionicons name={visibilite === 'friends' ? 'people' : 'lock-closed'} size={16} color={C.text} />
+                  <Text style={styles.toggleLabel}>{visibilite === 'friends' ? t("Visible par mes amis") : t("Privé")}</Text>
+                </View>
                 <Text style={styles.toggleSubtext}>
                   {visibilite === 'friends' ? t("Apparaît dans le feed de tes amis") : t("Visible seulement par toi")}
                 </Text>
@@ -639,23 +704,14 @@ export default function Rate() {
               <Switch
                 value={visibilite === 'friends'}
                 onValueChange={(v) => setVisibilite(v ? 'friends' : 'private')}
-                trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
+                trackColor={{ false: C.border, true: C.primary }}
                 thumbColor="#fff"
-                ios_backgroundColor="#F0D9D9"
+                ios_backgroundColor={C.border}
                 accessibilityLabel={t("Visible par mes amis")}
               />
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, (saving || uploadingPhotos) && { opacity: 0.6 }]}
-            onPress={handleSave}
-            disabled={saving || uploadingPhotos}
-          >
-            {saving && !uploadingPhotos
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>{statut === 'vecu' ? t("Enregistrer le date") : t("Planifier ce date")}</Text>}
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.resetButton}
@@ -665,12 +721,27 @@ export default function Rate() {
             <Text style={styles.resetButtonText}>{t("Réinitialiser le formulaire")}</Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Toujours visible : plus besoin de descendre tout en bas pour enregistrer */}
+        <View style={styles.saveBar}>
+          <View style={webContentStyle}>
+            <TouchableOpacity
+              style={[styles.button, (saving || uploadingPhotos) && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={saving || uploadingPhotos}
+            >
+              {saving && !uploadingPhotos
+                ? <ActivityIndicator color={C.onPrimary} />
+                : <Text style={styles.buttonText}>{statut === 'vecu' ? t("Enregistrer le date") : t("Planifier ce date")}</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
       </KeyboardAvoidingView>
 
       {uploadingPhotos && (
         <View style={styles.uploadOverlay}>
           <View style={styles.uploadCard}>
-            <ActivityIndicator color="#D4517E" size="large" />
+            <ActivityIndicator color={C.primary} size="large" />
             <Text style={styles.uploadTitle}>{t("Envoi des photos")}</Text>
             <Text style={styles.uploadCount}>{uploadProgress.current} / {uploadProgress.total}</Text>
             <View style={styles.progressTrack}>
@@ -688,34 +759,34 @@ export default function Rate() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t("Partir d'un date planifié ou d'un lieu à essayer")}</Text>
             <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={24} color="#5C4A45" />
+              <Ionicons name="close" size={24} color={C.text} />
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.modalContent}>
             {planifiedDates.length > 0 && (
               <>
-                <Text style={styles.modalSectionTitle}>{t("📅 Dates planifiés")}</Text>
+                <Text style={styles.modalSectionTitle}>{t("Dates planifiés")}</Text>
                 {planifiedDates.map((p) => (
                   <TouchableOpacity key={p.id} style={styles.modalRow} onPress={() => selectPlanifie(p)}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.modalRowTitle}>{p.intitule ?? p.lieu}</Text>
-                      <Text style={styles.modalRowSub}>📍 {p.lieu}</Text>
+                      <Text style={styles.modalRowSub}><Ionicons name="location-outline" size={12} color={C.muted} /> {p.lieu}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color="#B8A9A0" />
+                    <Ionicons name="chevron-forward" size={16} color={C.faint} />
                   </TouchableOpacity>
                 ))}
               </>
             )}
             {wishlistLieux.length > 0 && (
               <>
-                <Text style={[styles.modalSectionTitle, { marginTop: planifiedDates.length > 0 ? 20 : 0 }]}>{t("📍 Lieux à essayer")}</Text>
+                <Text style={[styles.modalSectionTitle, { marginTop: planifiedDates.length > 0 ? 20 : 0 }]}>{t("Lieux à essayer")}</Text>
                 {wishlistLieux.map((w) => (
                   <TouchableOpacity key={w.id} style={styles.modalRow} onPress={() => selectWishlistLieu(w)}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.modalRowTitle}>{w.nom}</Text>
-                      {w.adresse && <Text style={styles.modalRowSub}>📍 {w.adresse}</Text>}
+                      {w.adresse && <Text style={styles.modalRowSub}><Ionicons name="location-outline" size={12} color={C.muted} /> {w.adresse}</Text>}
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color="#B8A9A0" />
+                    <Ionicons name="chevron-forward" size={16} color={C.faint} />
                   </TouchableOpacity>
                 ))}
               </>
@@ -727,76 +798,90 @@ export default function Rate() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  container: { flex: 1, backgroundColor: '#FFF8F5' },
-  content: { padding: 20, paddingBottom: 60 },
-  title: { fontSize: 24, fontWeight: '600', color: '#D4517E' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: C.bg },
+  content: { padding: 20, paddingBottom: 24 },
+  title: { fontSize: 28, fontWeight: '800', color: C.primaryText, letterSpacing: -0.3 },
+  saveBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, backgroundColor: C.bg, borderTopWidth: 1, borderTopColor: C.border },
+  globalNoteBoxError: { borderColor: C.danger },
+  globalNoteEmpty: { color: C.faint },
+  noteStepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  stepBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  noteHint: { fontSize: 12, color: C.faint, textAlign: 'center' },
+  noteHintError: { color: C.danger, fontWeight: '600' },
+  detailsToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 4, marginBottom: 6 },
+  detailsToggleTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  detailsToggleSub: { fontSize: 12, color: C.faint, marginTop: 2 },
+  critereRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  critereValueEmpty: { color: C.faint },
+  toggleLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   bellBtn: { padding: 4 },
-  label: { fontSize: 14, fontWeight: '500', color: '#5C4A45', marginBottom: 8 },
-  labelOptional: { fontSize: 12, fontWeight: '400', color: '#B8A9A0' },
-  card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 14 },
-  segmented: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 14, padding: 4, borderWidth: 1, borderColor: '#F0D9D9' },
-  segment: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  segmentActive: { backgroundColor: '#D4517E' },
-  segmentText: { fontSize: 14, fontWeight: '600', color: '#5C4A45' },
-  segmentTextActive: { color: '#fff' },
-  segmentHint: { fontSize: 12, color: '#888', textAlign: 'center', marginTop: 6, marginBottom: 16 },
-  inputError: { borderColor: '#D85A30', marginBottom: 4 },
-  fieldError: { color: '#D85A30', fontSize: 12, marginBottom: 12 },
-  dateWarning: { backgroundColor: '#FFF3D6', borderRadius: 10, padding: 10, marginTop: -8, marginBottom: 8 },
-  dateWarningText: { fontSize: 12, color: '#8A6A1D' },
+  label: { fontSize: 14, fontWeight: '500', color: C.text, marginBottom: 8 },
+  labelOptional: { fontSize: 12, fontWeight: '400', color: C.faint },
+  card: { backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 14 },
+  segmented: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: C.border },
+  segmentInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  segment: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  segmentActive: { backgroundColor: C.primary },
+  segmentText: { fontSize: 14, fontWeight: '600', color: C.text },
+  segmentTextActive: { color: C.onPrimary },
+  segmentHint: { fontSize: 12, color: C.muted, textAlign: 'center', marginTop: 6, marginBottom: 16 },
+  inputError: { borderColor: C.danger, marginBottom: 4 },
+  fieldError: { color: C.danger, fontSize: 12, marginBottom: 12 },
+  dateWarning: { backgroundColor: C.warningBg, borderRadius: 10, padding: 10, marginTop: -8, marginBottom: 8 },
+  dateWarningText: { fontSize: 12, color: C.warningText },
   dateWarningLink: { fontWeight: '700', textDecorationLine: 'underline' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  toggleLabel: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
-  toggleSubtext: { fontSize: 12, color: '#888', marginTop: 2 },
-  input: { backgroundColor: '#FFF8F5', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 15 },
+  toggleLabel: { fontSize: 15, fontWeight: '600', color: C.text },
+  toggleSubtext: { fontSize: 12, color: C.muted, marginTop: 2 },
+  input: { backgroundColor: C.bg, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border, fontSize: 15 },
   textarea: { height: 100, textAlignVertical: 'top' },
-  globalNoteBox: { backgroundColor: '#FFF8F5', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  globalNoteValue: { fontSize: 32, fontWeight: '800', color: '#D4517E', textAlign: 'center', marginVertical: 4 },
-  globalNoteSuffix: { fontSize: 16, fontWeight: '600', color: '#B8A9A0' },
-  critereBox: { backgroundColor: '#FFF8F5', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
+  globalNoteBox: { backgroundColor: C.bg, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.border },
+  globalNoteValue: { fontSize: 32, fontWeight: '800', color: C.primaryText, textAlign: 'center', marginVertical: 4 },
+  globalNoteSuffix: { fontSize: 16, fontWeight: '600', color: C.faint },
+  critereBox: { backgroundColor: C.bg, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
   critereHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  critereValue: { fontSize: 14, fontWeight: '600', color: '#D4517E' },
+  critereValue: { fontSize: 14, fontWeight: '600', color: C.primaryText },
   photoGallery: { minWidth: 0 },
   photoThumbWrapper: { position: 'relative', marginRight: 10 },
-  photoThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: '#fff' },
-  photoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: '#D85A30', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  photoRemoveText: { color: '#fff', fontWeight: '700', fontSize: 14, lineHeight: 16 },
-  photoAddButton: { width: 90, height: 90, borderRadius: 10, backgroundColor: '#FFF8F5', borderWidth: 1, borderColor: '#F0D9D9', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-  photoAddText: { fontSize: 28, color: '#B8A9A0' },
-  conseilRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8F5', borderRadius: 12, padding: 14, marginTop: 4, borderWidth: 1, borderColor: '#F0D9D9' },
-  conseilRowActive: { borderColor: '#D4517E', backgroundColor: '#FDE8F0' },
-  conseilLabel: { fontSize: 14, fontWeight: '600', color: '#5C4A45', marginBottom: 2 },
-  conseilLabelActive: { color: '#D4517E' },
-  conseilSubtext: { fontSize: 12, color: '#888' },
-  button: { backgroundColor: '#D4517E', borderRadius: 14, padding: 17, alignItems: 'center', marginTop: 4, shadowColor: '#D4517E', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  photoThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: C.card },
+  photoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: C.danger, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  photoRemoveText: { color: C.onPrimary, fontWeight: '700', fontSize: 14, lineHeight: 16 },
+  photoAddButton: { width: 90, height: 90, borderRadius: 10, backgroundColor: C.bg, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  photoAddText: { fontSize: 28, color: C.faint },
+  conseilRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, borderRadius: 12, padding: 14, marginTop: 4, borderWidth: 1, borderColor: C.border },
+  conseilRowActive: { borderColor: C.primary, backgroundColor: C.primarySoft },
+  conseilLabel: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
+  conseilLabelActive: { color: C.primaryText },
+  conseilSubtext: { fontSize: 12, color: C.muted },
+  button: { backgroundColor: C.primary, borderRadius: 14, padding: 16, alignItems: 'center', shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+  buttonText: { color: C.onPrimary, fontWeight: '700', fontSize: 16 },
   resetButton: { alignItems: 'center', padding: 14, marginTop: 8 },
-  resetButtonText: { color: '#888', fontWeight: '600', fontSize: 14 },
+  resetButtonText: { color: C.muted, fontWeight: '600', fontSize: 14 },
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-  uploadCard: { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 260, gap: 10 },
-  uploadTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45', marginTop: 4 },
-  uploadCount: { fontSize: 14, color: '#888' },
-  progressTrack: { flexDirection: 'row', width: '100%', height: 6, backgroundColor: '#F0D9D9', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { backgroundColor: '#D4517E' },
+  uploadCard: { backgroundColor: C.card, borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 260, gap: 10 },
+  uploadTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginTop: 4 },
+  uploadCount: { fontSize: 14, color: C.muted },
+  progressTrack: { flexDirection: 'row', width: '100%', height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { backgroundColor: C.primary },
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#FFF8F5', borderWidth: 1, borderColor: '#F0D9D9' },
-  categoryChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  categoryChipText: { fontSize: 13, color: '#5C4A45', fontWeight: '500' },
-  categoryChipTextActive: { color: '#fff', fontWeight: '700' },
-  sourceEntryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#F0D9D9', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 16 },
-  sourceEntryText: { flex: 1, fontSize: 13, color: '#5C4A45', fontWeight: '500' },
-  sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FDE8F0', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
-  sourceBadgeText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#D4517E' },
-  modalSafe: { flex: 1, backgroundColor: '#FFF8F5' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0D9D9', gap: 12 },
-  modalTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  categoryChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: C.bg, borderWidth: 1, borderColor: C.border },
+  categoryChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  categoryChipText: { fontSize: 13, color: C.text, fontWeight: '500' },
+  categoryChipTextActive: { color: C.onPrimary, fontWeight: '700' },
+  sourceEntryBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 16 },
+  sourceEntryText: { flex: 1, fontSize: 13, color: C.text, fontWeight: '500' },
+  sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.primarySoft, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
+  sourceBadgeText: { flex: 1, fontSize: 13, fontWeight: '600', color: C.primaryText },
+  modalSafe: { flex: 1, backgroundColor: C.bg },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 },
+  modalTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: C.text },
   modalContent: { padding: 20, paddingBottom: 60 },
-  modalSectionTitle: { fontSize: 13, fontWeight: '700', color: '#5C4A45', marginBottom: 10 },
-  modalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#F0D9D9' },
-  modalRowTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45' },
-  modalRowSub: { fontSize: 12, color: '#888', marginTop: 2 },
-})
+  modalSectionTitle: { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 10 },
+  modalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  modalRowTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  modalRowSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+}))

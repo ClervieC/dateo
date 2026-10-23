@@ -9,8 +9,10 @@ import { extraireCategories, filtrerParCategorie } from '../../lib/feedUtils'
 import { CATEGORIES, getCategoryLabel, getCategoryColor } from '../../lib/categories'
 import { webContentStyle } from '../../lib/webStyles'
 import { showAlert } from '../../lib/alert'
+import { SkeletonList } from '../../lib/Skeleton'
 import { useBottomTabs } from '../../lib/useBottomTabs'
 import { t, tKey, getLang } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 type Idea = { id: string; titre: string; description: string | null; categorie: string | null; ville: string | null }
 
@@ -240,13 +242,13 @@ export default function Ideas() {
             </View>
 
             <View style={styles.searchBar}>
-              <Ionicons name="search" size={15} color="#B8A9A0" />
+              <Ionicons name="search" size={15} color={C.faint} />
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder={t("Rechercher une idée...")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
                 clearButtonMode="while-editing"
               />
             </View>
@@ -260,40 +262,26 @@ export default function Ideas() {
               </View>
             )}
 
-            {!ville && (
-              <TouchableOpacity style={styles.wishlistTeaser} onPress={() => router.push('/settings')} activeOpacity={0.8}>
-                <Ionicons name="location-outline" size={16} color="#D4517E" />
-                <Text style={styles.iaTeaserText}>
-                  {t("Renseigne")} <Text style={styles.iaTeaserLink}>{t("ta ville dans les paramètres →")}</Text> {t("pour voir des idées près de chez toi")}
-                </Text>
-              </TouchableOpacity>
-            )}
-
+            {/* Raccourcis en grille 2×2 plutôt que 4 bandeaux empilés avant le contenu */}
             {!selectedCategorie && !searchQuery.trim() && (
-              <TouchableOpacity style={styles.iaTeaser} onPress={() => setSelectedCategorie(FILTER_IA)} activeOpacity={0.8}>
-                <Ionicons name="sparkles" size={16} color="#D4517E" />
-                <Text style={styles.iaTeaserText}>
-                  {t("Pas d'inspiration ? Laisse l'IA te proposer des idées dans")} <Text style={styles.iaTeaserLink}>{t("Pour toi →")}</Text>
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {!selectedCategorie && !searchQuery.trim() && (
-              <TouchableOpacity style={styles.iaTeaser} onPress={() => router.push('/conversation')} activeOpacity={0.8}>
-                <Ionicons name="chatbubbles" size={16} color="#D4517E" />
-                <Text style={styles.iaTeaserText}>
-                  {t("Peur des blancs ? Prépare des")} <Text style={styles.iaTeaserLink}>{t("sujets de conversation →")}</Text>
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {!selectedCategorie && !searchQuery.trim() && (
-              <TouchableOpacity style={styles.wishlistTeaser} onPress={() => router.push('/wishlist')} activeOpacity={0.8}>
-                <Ionicons name="location" size={16} color="#D4517E" />
-                <Text style={styles.iaTeaserText}>
-                  {t("Retrouve les lieux que tu veux essayer dans")} <Text style={styles.iaTeaserLink}>{t("Lieux à essayer →")}</Text>
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.shortcutGrid}>
+                {[
+                  { icon: 'sparkles' as const, title: t("Idées par l'IA"), sub: t("Selon tes goûts"), onPress: () => setSelectedCategorie(FILTER_IA) },
+                  { icon: 'chatbubbles' as const, title: t("Sujets de conversation"), sub: t("Fini les blancs"), onPress: () => router.push('/conversation') },
+                  { icon: 'location' as const, title: t("Lieux à essayer"), sub: t("Ta liste d'envies"), onPress: () => router.push('/wishlist') },
+                  ville
+                    ? { icon: 'heart' as const, title: t("Favoris"), sub: t("Tes idées sauvegardées"), onPress: () => setSelectedCategorie(FILTER_FAVORIS) }
+                    : { icon: 'navigate' as const, title: t("Ta ville"), sub: t("Pour des idées près de toi"), onPress: () => router.push('/settings') },
+                ].map((s) => (
+                  <TouchableOpacity key={s.title} style={styles.shortcut} onPress={s.onPress} activeOpacity={0.8}>
+                    <View style={styles.shortcutIcon}>
+                      <Ionicons name={s.icon} size={18} color={C.primaryText} />
+                    </View>
+                    <Text style={styles.shortcutTitle} numberOfLines={1}>{s.title}</Text>
+                    <Text style={styles.shortcutSub} numberOfLines={1}>{s.sub}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
 
             <FlatList
@@ -326,7 +314,7 @@ export default function Ideas() {
             {selectedCategorie === FILTER_IA && (
             <View style={styles.recsSection}>
               <View style={styles.recsHeader}>
-                <Ionicons name="sparkles" size={18} color="#D4517E" />
+                <Ionicons name="sparkles" size={18} color={C.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.recsTitle}>{t("Idées générées pour toi")}</Text>
                   <Text style={styles.recsSubtitle}>{t("Choisis une approche, l'IA s'occupe du reste")}</Text>
@@ -370,7 +358,7 @@ export default function Ideas() {
                 <TextInput
                   style={styles.recFreeInput}
                   placeholder={t("Ex : quelque chose de calme en extérieur, pas cher...")}
-                  placeholderTextColor="#B8A9A0"
+                  placeholderTextColor={C.faint}
                   value={recFreeText}
                   onChangeText={setRecFreeText}
                 />
@@ -381,7 +369,7 @@ export default function Ideas() {
                 onPress={loadRecommendations}
                 disabled={!canGenerate || loadingRecs}
               >
-                <Ionicons name="sparkles" size={15} color="#fff" />
+                <Ionicons name="sparkles" size={15} color={C.onPrimary} />
                 <Text style={styles.recsButtonText}>
                   {loadingRecs ? t("Génération...") : recommendations.length > 0 ? t("Régénérer") : t("Générer des idées")}
                 </Text>
@@ -389,7 +377,7 @@ export default function Ideas() {
 
               {loadingRecs && (
                 <View style={styles.thinkingCard}>
-                  <ActivityIndicator color="#D4517E" size="large" />
+                  <ActivityIndicator color={C.primary} size="large" />
                   <Text style={styles.thinkingTitle}>{t("L'IA réfléchit")}{thinkingDots}</Text>
                   <Text style={styles.thinkingSubtext}>
                     {t("Analyse de tes dates passés pour trouver les meilleures idées pour toi")}
@@ -430,7 +418,7 @@ export default function Ideas() {
                             <Ionicons
                               name={isFav ? 'heart' : 'heart-outline'}
                               size={22}
-                              color="#D4517E"
+                              color={C.primary}
                             />
                           </TouchableOpacity>
                         </View>
@@ -444,7 +432,7 @@ export default function Ideas() {
             </View>
             )}
 
-            {loading && <ActivityIndicator color="#D4517E" style={{ marginTop: 20 }} />}
+            {loading && ideas.length === 0 && <SkeletonList count={3} />}
           </View>
         }
         renderItem={({ item }) => {
@@ -469,7 +457,7 @@ export default function Ideas() {
                   <Ionicons
                     name={isFav ? 'heart' : 'heart-outline'}
                     size={22}
-                    color="#D4517E"
+                    color={C.primary}
                   />
                 </TouchableOpacity>
               </View>
@@ -506,74 +494,79 @@ export default function Ideas() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  container: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: C.bg },
   content: { padding: 20, paddingBottom: 60 },
-  title: { fontSize: 24, fontWeight: '600', color: '#D4517E' },
+  title: { fontSize: 28, fontWeight: '800', color: C.primaryText, letterSpacing: -0.3 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   bellBtn: { padding: 4 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#F0D9D9', gap: 8, marginBottom: 12 },
-  searchInput: { flex: 1, fontSize: 14, color: '#5C4A45', padding: 0 },
-  iaTeaser: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF4F7', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#F4C0D1' },
-  wishlistTeaser: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  iaTeaserText: { flex: 1, fontSize: 12, color: '#72243E', lineHeight: 17 },
-  iaTeaserLink: { color: '#D4517E', fontWeight: '700' },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: C.border, gap: 8, marginBottom: 12 },
+  searchInput: { flex: 1, fontSize: 14, color: C.text, padding: 0 },
+  shortcutGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 14 },
+  shortcut: { width: '48.5%', backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
+  shortcutIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  shortcutTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  shortcutSub: { fontSize: 12, color: C.faint, marginTop: 2 },
+  iaTeaser: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.bgAlt, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: C.primaryBorder },
+  wishlistTeaser: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: C.border },
+  iaTeaserText: { flex: 1, fontSize: 12, color: C.primaryDark, lineHeight: 17 },
+  iaTeaserLink: { color: C.primaryText, fontWeight: '700' },
   filterRow: { marginBottom: 16, minWidth: 0 },
-  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
-  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
-  filterChip: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 8, borderWidth: 1, borderColor: '#F0D9D9' },
-  filterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  filterChipFav: { borderColor: '#D4517E' },
-  filterChipText: { fontSize: 13, color: '#5C4A45', fontWeight: '500' },
-  filterChipTextActive: { color: '#fff' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
+  errorBanner: { backgroundColor: C.errorBg, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: C.errorText, fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
+  filterChip: { backgroundColor: C.card, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 8, borderWidth: 1, borderColor: C.border },
+  filterChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  filterChipFav: { borderColor: C.primary },
+  filterChipText: { fontSize: 13, color: C.text, fontWeight: '500' },
+  filterChipTextActive: { color: C.onPrimary },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.border },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   badge: { alignSelf: 'flex-start', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 10 },
   badgeText: { fontSize: 11, fontWeight: '600' },
-  ideaTitle: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 4 },
-  ideaDescription: { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
-  ideaCta: { fontSize: 12, color: '#D4517E', fontWeight: '500' },
+  ideaTitle: { fontSize: 16, fontWeight: '600', color: C.text, marginBottom: 4 },
+  ideaDescription: { fontSize: 13, color: C.muted, lineHeight: 18, marginBottom: 6 },
+  ideaCta: { fontSize: 12, color: C.primaryText, fontWeight: '500' },
   recsSection: {
     marginBottom: 24,
-    backgroundColor: '#FFF4F7',
+    backgroundColor: C.bgAlt,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#F4C0D1',
+    borderColor: C.primaryBorder,
   },
   recsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  recsTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
-  recsSubtitle: { fontSize: 12, color: '#888', marginTop: 1 },
-  recSegmented: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#F0D9D9', gap: 4 },
+  recsTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  recsSubtitle: { fontSize: 12, color: C.muted, marginTop: 1 },
+  recSegmented: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: C.border, gap: 4 },
   recSegment: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center', gap: 2 },
-  recSegmentActive: { backgroundColor: '#D4517E' },
+  recSegmentActive: { backgroundColor: C.primary },
   recSegmentEmoji: { fontSize: 15 },
-  recSegmentText: { fontSize: 11, color: '#5C4A45', fontWeight: '600', textAlign: 'center' },
-  recSegmentTextActive: { color: '#fff' },
-  recModeHint: { fontSize: 12, color: '#888', textAlign: 'center', marginTop: 8, marginBottom: 4 },
-  recsButton: { backgroundColor: '#D4517E', borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  recsButtonDisabled: { backgroundColor: '#E3C3CE' },
-  recsButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  recSegmentText: { fontSize: 11, color: C.text, fontWeight: '600', textAlign: 'center' },
+  recSegmentTextActive: { color: C.onPrimary },
+  recModeHint: { fontSize: 12, color: C.muted, textAlign: 'center', marginTop: 8, marginBottom: 4 },
+  recsButton: { backgroundColor: C.primary, borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  recsButtonDisabled: { backgroundColor: C.primaryBorder },
+  recsButtonText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
   recThemeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  recThemeChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  recThemeChipActive: { backgroundColor: '#FBEAF0', borderColor: '#D4517E' },
-  recThemeChipText: { fontSize: 12, color: '#888', fontWeight: '500' },
-  recThemeChipTextActive: { color: '#D4517E', fontWeight: '700' },
-  recFreeInput: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 10, fontSize: 13, color: '#5C4A45', marginTop: 4 },
-  recsMessage: { color: '#993556', fontSize: 13, marginTop: 10, textAlign: 'center' },
-  thinkingCard: { backgroundColor: '#fff', borderRadius: 16, padding: 24, alignItems: 'center', gap: 12, marginTop: 12, borderWidth: 1, borderColor: '#F4C0D1' },
-  thinkingTitle: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
-  thinkingSubtext: { fontSize: 13, color: '#72243E', textAlign: 'center', lineHeight: 18 },
+  recThemeChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  recThemeChipActive: { backgroundColor: C.primarySoft, borderColor: C.primary },
+  recThemeChipText: { fontSize: 12, color: C.muted, fontWeight: '500' },
+  recThemeChipTextActive: { color: C.primaryText, fontWeight: '700' },
+  recFreeInput: { backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 10, fontSize: 13, color: C.text, marginTop: 4 },
+  recsMessage: { color: C.primaryDark, fontSize: 13, marginTop: 10, textAlign: 'center' },
+  thinkingCard: { backgroundColor: C.card, borderRadius: 16, padding: 24, alignItems: 'center', gap: 12, marginTop: 12, borderWidth: 1, borderColor: C.primaryBorder },
+  thinkingTitle: { fontSize: 16, fontWeight: '700', color: C.primaryText },
+  thinkingSubtext: { fontSize: 13, color: C.primaryDark, textAlign: 'center', lineHeight: 18 },
   recResults: { marginTop: 14, gap: 8 },
-  recCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F4C0D1' },
+  recCard: { backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.primaryBorder },
   recHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
-  recTitle: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
-  recReason: { fontSize: 13, color: '#72243E', marginBottom: 6 },
-  recCta: { fontSize: 12, color: '#D4517E', fontWeight: '500' },
+  recTitle: { fontSize: 15, fontWeight: '600', color: C.text },
+  recReason: { fontSize: 13, color: C.primaryDark, marginBottom: 6 },
+  recCta: { fontSize: 12, color: C.primaryText, fontWeight: '500' },
   emptyContainer: { alignItems: 'center', marginTop: 40 },
   emptyIcon: { fontSize: 36, marginBottom: 8 },
-  empty: { color: '#888', textAlign: 'center', fontSize: 15 },
-  emptySub: { color: '#B8A9A0', textAlign: 'center', fontSize: 13, marginTop: 4 },
-})
+  empty: { color: C.muted, textAlign: 'center', fontSize: 15 },
+  emptySub: { color: C.faint, textAlign: 'center', fontSize: 13, marginTop: 4 },
+}))

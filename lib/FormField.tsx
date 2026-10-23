@@ -2,6 +2,7 @@ import { forwardRef, useState, ReactNode } from 'react'
 import { View, Text, TextInput, TextInputProps, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { t } from './i18n'
+import { C, themedStyles } from './theme'
 
 type Props = TextInputProps & {
   label: string
@@ -26,7 +27,7 @@ export const FormField = forwardRef<TextInput, Props>(function FormField(
         <TextInput
           ref={ref}
           style={[styles.input, style]}
-          placeholderTextColor="#B8A9A0"
+          placeholderTextColor={C.faint}
           secureTextEntry={password ? hidden : undefined}
           accessibilityLabel={label}
           {...inputProps}
@@ -39,7 +40,7 @@ export const FormField = forwardRef<TextInput, Props>(function FormField(
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel={hidden ? t("Afficher le mot de passe") : t("Masquer le mot de passe")}
           >
-            <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color="#B8A9A0" />
+            <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={20} color={C.faint} />
           </TouchableOpacity>
         )}
         {right}
@@ -49,13 +50,13 @@ export const FormField = forwardRef<TextInput, Props>(function FormField(
   )
 })
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   wrap: { marginBottom: 14 },
-  label: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  inputRowFocused: { borderColor: '#D4517E' },
-  inputRowError: { borderColor: '#D85A30' },
-  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#5C4A45', minWidth: 0 },
-  error: { color: '#D85A30', fontSize: 12, marginTop: 4 },
-  hint: { color: '#888', fontSize: 12, marginTop: 4 },
-})
+  label: { fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 6 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: C.border },
+  inputRowFocused: { borderColor: C.primary },
+  inputRowError: { borderColor: C.danger },
+  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: C.text, minWidth: 0 },
+  error: { color: C.danger, fontSize: 12, marginTop: 4 },
+  hint: { color: C.muted, fontSize: 12, marginTop: 4 },
+}))

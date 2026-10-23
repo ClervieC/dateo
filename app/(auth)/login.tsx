@@ -6,6 +6,7 @@ import { FormField } from '../../lib/FormField'
 import { AuthScreen, authStyles } from '../../lib/AuthScreen'
 import { emailValide, traduireErreurAuth } from '../../lib/authErrors'
 import { t } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -102,7 +103,7 @@ export default function Login() {
       {info ? <Text style={authStyles.formSuccess}>{info}</Text> : null}
 
       <TouchableOpacity style={[authStyles.button, loading && authStyles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Se connecter")}</Text>}
+        {loading ? <ActivityIndicator color={C.onPrimary} /> : <Text style={authStyles.buttonText}>{t("Se connecter")}</Text>}
       </TouchableOpacity>
 
       <View style={authStyles.secondaryLinkRow}>
@@ -119,9 +120,9 @@ export default function Login() {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   forgotLink: { alignSelf: 'flex-end', marginTop: -6, marginBottom: 14, paddingVertical: 4 },
-  forgotText: { color: '#D4517E', fontSize: 13, fontWeight: '600' },
+  forgotText: { color: C.primaryText, fontSize: 13, fontWeight: '600' },
   resendBtn: { alignSelf: 'center', marginBottom: 12, padding: 4 },
-  deleteLink: { alignSelf: 'center', marginTop: 28, color: '#B8A9A0', fontSize: 12 },
-})
+  deleteLink: { alignSelf: 'center', marginTop: 28, color: C.faint, fontSize: 12 },
+}))

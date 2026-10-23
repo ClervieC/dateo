@@ -9,6 +9,7 @@ import { CATEGORIES } from '../lib/categories'
 import { nomsDesJours, nomsDesMois } from '../lib/dateUtils'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t, tn } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type DateRow = { lieu: string; note_globale: number; date_du_date: string; categorie: string | null }
 
@@ -16,10 +17,10 @@ type DateRow = { lieu: string; note_globale: number; date_du_date: string; categ
 // Bornes demi-ouvertes [min, max[ : les notes sont au quart de point (ex : 9.5),
 // des bornes entières en laissaient passer certaines entre deux tranches.
 const NOTE_BINS = [
-  { label: '< 10', min: 0, max: 10, color: '#F0D9D9' },
-  { label: '10–12', min: 10, max: 13, color: '#F4C0D1' },
-  { label: '13–15', min: 13, max: 16, color: '#D4517E' },
-  { label: '16–18', min: 16, max: 19, color: '#B03060' },
+  { label: '< 10', min: 0, max: 10, color: C.border },
+  { label: '10–12', min: 10, max: 13, color: C.primaryBorder },
+  { label: '13–15', min: 13, max: 16, color: C.primaryText },
+  { label: '16–18', min: 16, max: 19, color: C.primaryDark },
   { label: '19–20', min: 19, max: 20.01, color: '#7A1040' },
 ]
 
@@ -131,7 +132,7 @@ export default function Stats() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       </SafeAreaView>
     )
   }
@@ -217,7 +218,7 @@ export default function Stats() {
                 <View key={key} style={styles.histoRow}>
                   <Text style={styles.histoLabel}>{cat?.emoji ?? ''} {cat ? t(cat.label) : key}</Text>
                   <View style={styles.histoTrack}>
-                    <View style={[styles.histoFill, { flex: count / (catEntries[0][1] || 1), backgroundColor: '#D4517E' }]} />
+                    <View style={[styles.histoFill, { flex: count / (catEntries[0][1] || 1), backgroundColor: C.primary }]} />
                     {count < catEntries[0][1] && <View style={{ flex: 1 - count / catEntries[0][1] }} />}
                   </View>
                   <Text style={styles.histoCount}>{count}</Text>
@@ -264,7 +265,7 @@ export default function Stats() {
                 <Text style={styles.lieuMoy}>{l.moy.toFixed(1)}/20</Text>
                 {l.count > 1 && <Text style={styles.lieuCount}>{l.count}×</Text>}
                 <TouchableOpacity onPress={() => openMaps(l.lieu)} style={styles.mapBtn}>
-                  <Ionicons name="map-outline" size={16} color="#D4517E" />
+                  <Ionicons name="map-outline" size={16} color={C.primary} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -276,52 +277,52 @@ export default function Stats() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
-  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  emptyCta: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: '#5C4A45', marginBottom: 6 },
-  emptySubtext: { fontSize: 14, color: '#888', textAlign: 'center', paddingHorizontal: 40 },
+  emptyText: { fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 6 },
+  emptySubtext: { fontSize: 14, color: C.muted, textAlign: 'center', paddingHorizontal: 40 },
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#F0D9D9' },
-  summaryValue: { fontSize: 26, fontWeight: '800', color: '#D4517E' },
-  summaryLabel: { fontSize: 11, color: '#888', marginTop: 2, textAlign: 'center' },
-  section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#5C4A45', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryCard: { flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  summaryValue: { fontSize: 26, fontWeight: '800', color: C.primaryText },
+  summaryLabel: { fontSize: 11, color: C.muted, marginTop: 2, textAlign: 'center' },
+  section: { backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.5 },
   barChart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 120 },
   barCol: { flex: 1, alignItems: 'center', height: 120 },
-  barValue: { fontSize: 9, color: '#888', marginBottom: 2 },
-  barTrack: { flex: 1, width: '80%', flexDirection: 'column-reverse', backgroundColor: '#F0D9D9', borderRadius: 4, overflow: 'hidden' },
-  barFill: { backgroundColor: '#D4517E', borderRadius: 4 },
+  barValue: { fontSize: 9, color: C.muted, marginBottom: 2 },
+  barTrack: { flex: 1, width: '80%', flexDirection: 'column-reverse', backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' },
+  barFill: { backgroundColor: C.primary, borderRadius: 4 },
   barFillHigh: { backgroundColor: '#2D6A2D' },
-  barLabel: { fontSize: 10, color: '#888', marginTop: 4 },
-  barCount: { fontSize: 9, color: '#B8A9A0' },
+  barLabel: { fontSize: 10, color: C.muted, marginTop: 4 },
+  barCount: { fontSize: 9, color: C.faint },
   histoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-  histoLabel: { fontSize: 12, color: '#5C4A45', width: 70, fontWeight: '500' },
-  histoTrack: { flex: 1, flexDirection: 'row', height: 14, backgroundColor: '#F0D9D9', borderRadius: 7, overflow: 'hidden' },
+  histoLabel: { fontSize: 12, color: C.text, width: 70, fontWeight: '500' },
+  histoTrack: { flex: 1, flexDirection: 'row', height: 14, backgroundColor: C.border, borderRadius: 7, overflow: 'hidden' },
   histoFill: { borderRadius: 7 },
-  histoCount: { fontSize: 12, color: '#888', width: 24, textAlign: 'right', fontWeight: '600' },
+  histoCount: { fontSize: 12, color: C.muted, width: 24, textAlign: 'right', fontWeight: '600' },
   jourRow: { flexDirection: 'row', gap: 4, marginBottom: 10 },
-  jourCard: { flex: 1, backgroundColor: '#FFF8F5', borderRadius: 8, padding: 6, alignItems: 'center', borderWidth: 1, borderColor: '#F0D9D9' },
-  jourCardBest: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  jourLabel: { fontSize: 10, color: '#888', fontWeight: '600', marginBottom: 2 },
-  jourLabelBest: { color: '#fff' },
-  jourCount: { fontSize: 14, fontWeight: '800', color: '#5C4A45' },
-  jourCountBest: { color: '#fff' },
-  jourEmpty: { fontSize: 12, color: '#D0C5C0' },
-  jourCaption: { fontSize: 13, color: '#888', lineHeight: 18 },
-  jourHighlight: { color: '#D4517E', fontWeight: '700' },
-  lieuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0D9D9', gap: 8 },
-  lieuRank: { fontSize: 13, fontWeight: '700', color: '#D4517E', width: 24 },
-  lieuName: { flex: 1, fontSize: 14, color: '#5C4A45', fontWeight: '500' },
-  lieuMoy: { fontSize: 13, fontWeight: '700', color: '#D4517E' },
-  lieuCount: { fontSize: 11, color: '#888', backgroundColor: '#F0D9D9', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  jourCard: { flex: 1, backgroundColor: C.bg, borderRadius: 8, padding: 6, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  jourCardBest: { backgroundColor: C.primary, borderColor: C.primary },
+  jourLabel: { fontSize: 10, color: C.muted, fontWeight: '600', marginBottom: 2 },
+  jourLabelBest: { color: C.onPrimary },
+  jourCount: { fontSize: 14, fontWeight: '800', color: C.text },
+  jourCountBest: { color: C.onPrimary },
+  jourEmpty: { fontSize: 12, color: C.borderStrong },
+  jourCaption: { fontSize: 13, color: C.muted, lineHeight: 18 },
+  jourHighlight: { color: C.primaryText, fontWeight: '700' },
+  lieuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border, gap: 8 },
+  lieuRank: { fontSize: 13, fontWeight: '700', color: C.primaryText, width: 24 },
+  lieuName: { flex: 1, fontSize: 14, color: C.text, fontWeight: '500' },
+  lieuMoy: { fontSize: 13, fontWeight: '700', color: C.primaryText },
+  lieuCount: { fontSize: 11, color: C.muted, backgroundColor: C.border, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   mapBtn: { padding: 4 },
-})
+}))

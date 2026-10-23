@@ -9,6 +9,7 @@ import { todayIso, formaterDate } from '../lib/dateUtils'
 import { DatePicker } from '../lib/DatePicker'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type CoupleRow = {
   id: string
@@ -182,7 +183,7 @@ export default function Couple() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       </SafeAreaView>
     )
   }
@@ -209,7 +210,7 @@ export default function Couple() {
               value={searchUsername}
               onChangeText={(v) => { setSearchUsername(v); setSearchMsg('') }}
               placeholder={t("Son pseudo, ex : clervie.d")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="send"
@@ -325,7 +326,7 @@ export default function Couple() {
                 <Text style={styles.dateDebutText}>
                   {couple.dateDebut ? t("💕 Ensemble depuis le {date}", { date: formaterDate(couple.dateDebut) }) : t("💕 Ajouter la date de mise en couple")}
                 </Text>
-                <Ionicons name="pencil" size={13} color="#D4517E" />
+                <Ionicons name="pencil" size={13} color={C.primary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.dateDebutEditBox}>
@@ -379,48 +380,48 @@ export default function Couple() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  inviteHint: { fontSize: 12, color: '#888', marginTop: -4, marginBottom: 10 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  inviteHint: { fontSize: 12, color: C.muted, marginTop: -4, marginBottom: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
   hero: { alignItems: 'center', paddingVertical: 24 },
   heroEmoji: { fontSize: 52, marginBottom: 12 },
-  heroTitle: { fontSize: 22, fontWeight: '800', color: '#D4517E', marginBottom: 8 },
-  heroSub: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
-  section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: C.primaryText, marginBottom: 8 },
+  heroSub: { fontSize: 14, color: C.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
+  section: { backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 6 },
   dateDebutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 14 },
-  dateDebutText: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
+  dateDebutText: { fontSize: 13, color: C.primaryText, fontWeight: '600' },
   dateDebutEditBox: { marginBottom: 14, gap: 8 },
-  input: { borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 14, marginBottom: 8, backgroundColor: '#FFF8F5' },
-  btn: { backgroundColor: '#D4517E', borderRadius: 10, padding: 13, alignItems: 'center', marginBottom: 8 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  outlineBtn: { borderRadius: 10, borderWidth: 1, borderColor: '#D0C5C0', padding: 12, alignItems: 'center', marginBottom: 4 },
-  outlineBtnText: { color: '#888', fontSize: 14, fontWeight: '600' },
-  dangerBtn: { borderRadius: 10, borderWidth: 1, borderColor: '#D85A30', padding: 12, alignItems: 'center' },
-  dangerBtnText: { color: '#D85A30', fontWeight: '600', fontSize: 14 },
-  msgError: { fontSize: 13, color: '#D85A30', marginBottom: 8 },
-  partnerCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, padding: 12, backgroundColor: '#FFF8F5', borderRadius: 12 },
-  partnerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F0D9D9' },
-  partnerAvatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  partnerAvatarInitial: { fontSize: 20, fontWeight: '700', color: '#D4517E' },
-  partnerName: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
-  partnerSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  input: { borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 12, fontSize: 14, marginBottom: 8, backgroundColor: C.bg },
+  btn: { backgroundColor: C.primary, borderRadius: 10, padding: 13, alignItems: 'center', marginBottom: 8 },
+  btnText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+  outlineBtn: { borderRadius: 10, borderWidth: 1, borderColor: C.borderStrong, padding: 12, alignItems: 'center', marginBottom: 4 },
+  outlineBtnText: { color: C.muted, fontSize: 14, fontWeight: '600' },
+  dangerBtn: { borderRadius: 10, borderWidth: 1, borderColor: C.danger, padding: 12, alignItems: 'center' },
+  dangerBtnText: { color: C.danger, fontWeight: '600', fontSize: 14 },
+  msgError: { fontSize: 13, color: C.danger, marginBottom: 8 },
+  partnerCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, padding: 12, backgroundColor: C.bg, borderRadius: 12 },
+  partnerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.border },
+  partnerAvatarPlaceholder: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  partnerAvatarInitial: { fontSize: 20, fontWeight: '700', color: C.primaryText },
+  partnerName: { fontSize: 15, fontWeight: '700', color: C.text },
+  partnerSub: { fontSize: 12, color: C.muted, marginTop: 2 },
   coupleActiveHeader: { marginBottom: 12 },
-  coupleActiveBadge: { fontSize: 14, fontWeight: '700', color: '#D4517E', backgroundColor: '#FDE8F0', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8F5', borderRadius: 12, padding: 14, marginBottom: 14 },
+  coupleActiveBadge: { fontSize: 14, fontWeight: '700', color: C.primaryText, backgroundColor: C.primarySoft, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, borderRadius: 12, padding: 14, marginBottom: 14 },
   statCard: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '800', color: '#D4517E' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2, textAlign: 'center' },
-  statMoy: { fontSize: 13, fontWeight: '600', color: '#D4517E', marginTop: 4 },
-  statDivider: { width: 1, height: 48, backgroundColor: '#F0D9D9', marginHorizontal: 8 },
+  statValue: { fontSize: 22, fontWeight: '800', color: C.primaryText },
+  statLabel: { fontSize: 11, color: C.muted, marginTop: 2, textAlign: 'center' },
+  statMoy: { fontSize: 13, fontWeight: '600', color: C.primaryText, marginTop: 4 },
+  statDivider: { width: 1, height: 48, backgroundColor: C.border, marginHorizontal: 8 },
   confirmBox: { gap: 8 },
-  confirmWarn: { fontSize: 13, color: '#D85A30', marginBottom: 4 },
-  confirmYes: { backgroundColor: '#D85A30', borderRadius: 10, padding: 13, alignItems: 'center' },
-  confirmYesText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-})
+  confirmWarn: { fontSize: 13, color: C.danger, marginBottom: 4 },
+  confirmYes: { backgroundColor: C.danger, borderRadius: 10, padding: 13, alignItems: 'center' },
+  confirmYesText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+}))

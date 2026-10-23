@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, SafeAreaView } from 'r
 import { Ionicons } from '@expo/vector-icons'
 import { formaterDate, nomsDesMois, initialesJours } from './dateUtils'
 import { t } from './i18n'
+import { C, themedStyles } from './theme'
 
 type Props = {
   value: string | null
@@ -82,7 +83,7 @@ export function DatePicker({ value, onChange, placeholder }: Props) {
   return (
     <>
       <TouchableOpacity style={styles.field} onPress={openPicker} activeOpacity={0.8}>
-        <Ionicons name="calendar-outline" size={18} color="#B8A9A0" />
+        <Ionicons name="calendar-outline" size={18} color={C.faint} />
         <Text style={value ? styles.fieldValue : styles.fieldPlaceholder}>
           {value ? formaterDate(value) : placeholder ?? t("Choisir une date")}
         </Text>
@@ -94,7 +95,7 @@ export function DatePicker({ value, onChange, placeholder }: Props) {
             <SafeAreaView>
               <View style={styles.header}>
                 <TouchableOpacity onPress={() => changeMonth(-1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="chevron-back" size={20} color="#D4517E" />
+                  <Ionicons name="chevron-back" size={20} color={C.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.headerLabelBtn}
@@ -102,10 +103,10 @@ export function DatePicker({ value, onChange, placeholder }: Props) {
                   accessibilityLabel={t("Changer de mois ou d'année")}
                 >
                   <Text style={styles.headerLabel}>{headerLabel}</Text>
-                  <Ionicons name={mode === 'days' ? 'chevron-down' : 'chevron-up'} size={14} color="#D4517E" />
+                  <Ionicons name={mode === 'days' ? 'chevron-down' : 'chevron-up'} size={14} color={C.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => changeMonth(1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="chevron-forward" size={20} color="#D4517E" />
+                  <Ionicons name="chevron-forward" size={20} color={C.primary} />
                 </TouchableOpacity>
               </View>
 
@@ -178,26 +179,26 @@ export function DatePicker({ value, onChange, placeholder }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
-  field: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF8F5', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  fieldValue: { fontSize: 15, color: '#5C4A45', fontWeight: '500' },
-  fieldPlaceholder: { fontSize: 15, color: '#B8A9A0' },
+const styles = themedStyles(() => ({
+  field: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  fieldValue: { fontSize: 15, color: C.text, fontWeight: '500' },
+  fieldPlaceholder: { fontSize: 15, color: C.faint },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  sheet: { backgroundColor: '#fff', borderRadius: 20, padding: 16, width: '100%', maxWidth: 340 },
+  sheet: { backgroundColor: C.card, borderRadius: 20, padding: 16, width: '100%', maxWidth: 340 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 },
-  headerLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#FDE8F0' },
-  headerLabel: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
+  headerLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: C.primarySoft },
+  headerLabel: { fontSize: 15, fontWeight: '700', color: C.text },
   pickGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 4 },
   pickCell: { width: '33.333%', paddingVertical: 14, alignItems: 'center', borderRadius: 10 },
   dowRow: { flexDirection: 'row', marginBottom: 4 },
-  dow: { flex: 1, textAlign: 'center', fontSize: 12, color: '#B8A9A0', fontWeight: '600' },
+  dow: { flex: 1, textAlign: 'center', fontSize: 12, color: C.faint, fontWeight: '600' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center' },
   dayCell: { borderRadius: 10 },
-  dayCellSelected: { backgroundColor: '#D4517E' },
-  dayCellToday: { borderWidth: 1, borderColor: '#D4517E' },
-  dayText: { fontSize: 14, color: '#5C4A45', fontWeight: '500' },
-  dayTextSelected: { color: '#fff', fontWeight: '700' },
+  dayCellSelected: { backgroundColor: C.primary },
+  dayCellToday: { borderWidth: 1, borderColor: C.primary },
+  dayText: { fontSize: 14, color: C.text, fontWeight: '500' },
+  dayTextSelected: { color: C.onPrimary, fontWeight: '700' },
   todayBtn: { marginTop: 12, alignItems: 'center', padding: 10 },
-  todayBtnText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
-})
+  todayBtnText: { color: C.primaryText, fontWeight: '600', fontSize: 13 },
+}))

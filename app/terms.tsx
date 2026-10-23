@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router'
 import { webContentStyle } from '../lib/webStyles'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t, getLang } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 const SECTIONS = [
   {
@@ -129,16 +130,16 @@ export default function Terms() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
-  disclaimer: { backgroundColor: '#FFF3D6', borderRadius: 12, padding: 14, marginBottom: 16 },
-  disclaimerText: { fontSize: 12, color: '#8A6A1D', lineHeight: 18 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#D4517E', marginBottom: 8 },
-  cardBody: { fontSize: 13, color: '#5C4A45', lineHeight: 19 },
-})
+  disclaimer: { backgroundColor: C.warningBg, borderRadius: 12, padding: 14, marginBottom: 16 },
+  disclaimerText: { fontSize: 12, color: C.warningText, lineHeight: 18 },
+  card: { backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: C.border },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: C.primaryText, marginBottom: 8 },
+  cardBody: { fontSize: 13, color: C.text, lineHeight: 19 },
+}))

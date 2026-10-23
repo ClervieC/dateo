@@ -9,6 +9,7 @@ import { webContentStyle } from '../lib/webStyles'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { TOPIC_CATEGORIES, melangerQuestions } from '../lib/conversationTopics'
 import { t, tKey, getLang } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 const DRAFT_KEY = 'conversationDraft'
 const MAX_DESCRIPTION = 600
@@ -127,7 +128,7 @@ export default function Conversation() {
                   value={description}
                   onChangeText={(v) => { setDescription(v.slice(0, MAX_DESCRIPTION)); setError('') }}
                   placeholder={t("Ex : Léa, 27 ans, infirmière. Fan d'escalade et de séries coréennes, elle a vécu un an au Japon et adore cuisiner.")}
-                  placeholderTextColor="#B8A9A0"
+                  placeholderTextColor={C.faint}
                   multiline
                   textAlignVertical="top"
                 />
@@ -157,7 +158,7 @@ export default function Conversation() {
                   value={contexte}
                   onChangeText={setContexte}
                   placeholder={t("Ex : dîner dans un resto italien, balade au bord du lac…")}
-                  placeholderTextColor="#B8A9A0"
+                  placeholderTextColor={C.faint}
                   maxLength={200}
                 />
 
@@ -165,7 +166,7 @@ export default function Conversation() {
 
                 <TouchableOpacity style={[styles.button, loading && { opacity: 0.7 }]} onPress={generate} disabled={loading}>
                   {loading
-                    ? <ActivityIndicator color="#fff" />
+                    ? <ActivityIndicator color={C.onPrimary} />
                     : <Text style={styles.buttonText}>{sujets.length > 0 ? t("🔄 Proposer d'autres sujets") : t("✨ Trouver des sujets")}</Text>}
                 </TouchableOpacity>
                 <Text style={styles.privacy}>
@@ -179,7 +180,7 @@ export default function Conversation() {
                   <Text style={styles.sujetQuestion}>{s.question}</Text>
                   {s.relance ? (
                     <View style={styles.relanceRow}>
-                      <Ionicons name="return-down-forward" size={14} color="#D4517E" />
+                      <Ionicons name="return-down-forward" size={14} color={C.primary} />
                       <Text style={styles.relanceText}>{s.relance}</Text>
                     </View>
                   ) : null}
@@ -215,7 +216,7 @@ export default function Conversation() {
               ))}
 
               <TouchableOpacity style={styles.shuffleBtn} onPress={() => setSeed((s) => s + 1)}>
-                <Ionicons name="shuffle" size={18} color="#D4517E" />
+                <Ionicons name="shuffle" size={18} color={C.primary} />
                 <Text style={styles.shuffleText}>{t("Mélanger")}</Text>
               </TouchableOpacity>
             </>
@@ -226,40 +227,40 @@ export default function Conversation() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
   content: { padding: 20, paddingBottom: 60 },
-  segmented: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 14, padding: 4, borderWidth: 1, borderColor: '#F0D9D9', marginBottom: 16 },
+  segmented: { flexDirection: 'row', backgroundColor: C.card, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
   segment: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  segmentActive: { backgroundColor: '#D4517E' },
-  segmentText: { fontSize: 13, fontWeight: '600', color: '#5C4A45' },
-  segmentTextActive: { color: '#fff' },
-  card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  label: { fontSize: 14, fontWeight: '600', color: '#5C4A45', marginBottom: 8 },
-  optional: { fontSize: 12, fontWeight: '400', color: '#B8A9A0' },
-  input: { backgroundColor: '#FFF8F5', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 15, color: '#5C4A45', marginBottom: 16 },
+  segmentActive: { backgroundColor: C.primary },
+  segmentText: { fontSize: 13, fontWeight: '600', color: C.text },
+  segmentTextActive: { color: C.onPrimary },
+  card: { backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  label: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 8 },
+  optional: { fontSize: 12, fontWeight: '400', color: C.faint },
+  input: { backgroundColor: C.bg, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: C.border, fontSize: 15, color: C.text, marginBottom: 16 },
   textarea: { minHeight: 110, marginBottom: 4 },
-  counter: { fontSize: 11, color: '#B8A9A0', textAlign: 'right', marginBottom: 12 },
+  counter: { fontSize: 11, color: C.faint, textAlign: 'right', marginBottom: 12 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   catRow: { gap: 8, paddingBottom: 14 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#FFF8F5', borderWidth: 1, borderColor: '#F0D9D9' },
-  chipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  chipText: { fontSize: 13, color: '#5C4A45', fontWeight: '500' },
-  chipTextActive: { color: '#fff', fontWeight: '700' },
-  error: { color: '#993C1D', backgroundColor: '#FDE8DE', borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 12, overflow: 'hidden' },
-  button: { backgroundColor: '#D4517E', borderRadius: 14, padding: 16, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  privacy: { fontSize: 11, color: '#888', marginTop: 10, lineHeight: 16 },
-  sujetCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
-  sujetTheme: { alignSelf: 'flex-start', fontSize: 11, fontWeight: '700', color: '#D4517E', backgroundColor: '#FDE8F0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 8, overflow: 'hidden', textTransform: 'uppercase', letterSpacing: 0.4 },
-  sujetNumber: { fontSize: 12, fontWeight: '700', color: '#B8A9A0', marginBottom: 4 },
-  sujetQuestion: { fontSize: 16, fontWeight: '600', color: '#5C4A45', lineHeight: 22 },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: C.bg, borderWidth: 1, borderColor: C.border },
+  chipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  chipText: { fontSize: 13, color: C.text, fontWeight: '500' },
+  chipTextActive: { color: C.onPrimary, fontWeight: '700' },
+  error: { color: C.errorText, backgroundColor: C.errorBg, borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 12, overflow: 'hidden' },
+  button: { backgroundColor: C.primary, borderRadius: 14, padding: 16, alignItems: 'center' },
+  buttonText: { color: C.onPrimary, fontWeight: '700', fontSize: 16 },
+  privacy: { fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 16 },
+  sujetCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  sujetTheme: { alignSelf: 'flex-start', fontSize: 11, fontWeight: '700', color: C.primaryText, backgroundColor: C.primarySoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 8, overflow: 'hidden', textTransform: 'uppercase', letterSpacing: 0.4 },
+  sujetNumber: { fontSize: 12, fontWeight: '700', color: C.faint, marginBottom: 4 },
+  sujetQuestion: { fontSize: 16, fontWeight: '600', color: C.text, lineHeight: 22 },
   relanceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
-  relanceText: { flex: 1, fontSize: 14, color: '#5C4A45', lineHeight: 20 },
-  sujetWhy: { fontSize: 12, color: '#888', marginTop: 8, fontStyle: 'italic' },
+  relanceText: { flex: 1, fontSize: 14, color: C.text, lineHeight: 20 },
+  sujetWhy: { fontSize: 12, color: C.muted, marginTop: 8, fontStyle: 'italic' },
   switchHint: { alignItems: 'center', paddingVertical: 8 },
-  switchHintText: { fontSize: 13, color: '#888', textAlign: 'center' },
-  link: { color: '#D4517E', fontWeight: '600' },
+  switchHintText: { fontSize: 13, color: C.muted, textAlign: 'center' },
+  link: { color: C.primaryText, fontWeight: '600' },
   shuffleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
-  shuffleText: { color: '#D4517E', fontWeight: '700', fontSize: 15 },
-})
+  shuffleText: { color: C.primaryText, fontWeight: '700', fontSize: 15 },
+}))

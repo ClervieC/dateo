@@ -10,6 +10,7 @@ import { uriToBlob } from '../../lib/uploadImage'
 import { supabase } from '../../lib/supabase'
 import { calculerMoyenne, trouverMeilleurLieu, formaterDate, formatNote, nomsDesMois, initialesJours } from '../../lib/dateUtils'
 import { CRITERES } from '../../lib/criteres'
+import { SkeletonList } from '../../lib/Skeleton'
 import { showAlert, confirmAction } from '../../lib/alert'
 import { saveRatings } from '../../lib/ratings'
 import { DatePicker } from '../../lib/DatePicker'
@@ -18,6 +19,7 @@ import { PhotoViewer } from '../../lib/PhotoViewer'
 import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
 import { useBottomTabs } from '../../lib/useBottomTabs'
 import { t, tn } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 
 const MAX_PHOTOS = 10
@@ -93,6 +95,7 @@ export default function Profile() {
   const [companions, setCompanions] = useState<{ id: string; username: string }[]>([])
   const [selectedCompanionIds, setSelectedCompanionIds] = useState<Set<string>>(new Set())
   const [planifieModalVisible, setPlanifieModalVisible] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const router = useRouter()
   // Cloche dans l'en-tête sur téléphone ; sur ordinateur elle est dans la barre du haut
   const showBell = useBottomTabs()
@@ -475,7 +478,10 @@ export default function Profile() {
             {item.intitule ? (
               <>
                 <Text style={styles.dateTitre}>{item.intitule}</Text>
-                <Text style={styles.dateLieu}>📍 {item.lieu}</Text>
+                <View style={styles.iconLine}>
+                      <Ionicons name="location-outline" size={12} color={C.muted} />
+                      <Text style={styles.dateLieu}>{item.lieu}</Text>
+                    </View>
               </>
             ) : (
               <Text style={styles.dateLieu}>{item.lieu}</Text>
@@ -527,7 +533,7 @@ export default function Profile() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 {showBell && <NotificationBell style={styles.settingsBtn} />}
                 <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn} accessibilityLabel={t("Paramètres")}>
-                  <Ionicons name="settings-outline" size={22} color="#D4517E" />
+                  <Ionicons name="settings-outline" size={22} color={C.primary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -557,27 +563,23 @@ export default function Profile() {
               </View>
             </View>
 
-            {/* Grille plutôt qu'une bande qui défile : les 10 raccourcis restent visibles sur un téléphone */}
+            {/* 4 raccourcis principaux, le reste derrière « Plus » pour alléger l'écran */}
             <View style={styles.quickLinks}>
               {[
                 { icon: 'people-outline' as const, label: t("Amis"), onPress: () => router.push('/friends') },
                 { icon: 'stats-chart-outline' as const, label: t("Stats"), onPress: () => router.push('/stats') },
-                { icon: 'sparkles-outline' as const, label: t("Récap"), onPress: () => router.push('/recap') },
                 { icon: 'heart-outline' as const, label: t("Couple"), onPress: () => router.push('/couple') },
-                { icon: 'trophy-outline' as const, label: t("Classement"), onPress: () => router.push('/leaderboard') },
-                { icon: 'ribbon-outline' as const, label: t("Badges"), onPress: () => router.push('/badges') },
-                { icon: 'search-outline' as const, label: t("Recherche"), onPress: () => router.push('/search') },
-                { icon: 'bookmark-outline' as const, label: t("Favoris"), onPress: () => router.push('/favorites') },
                 { icon: 'location-outline' as const, label: t("À essayer"), onPress: () => router.push('/wishlist') },
-                { icon: 'share-social-outline' as const, label: t("Partager"), onPress: shareProfile },
+                { icon: 'grid-outline' as const, label: t("Plus"), onPress: () => setMoreOpen(true) },
               ].map((item) => (
                 <TouchableOpacity key={item.label} style={styles.quickLink} onPress={item.onPress}>
-                  <Ionicons name={item.icon} size={20} color="#D4517E" />
+                  <Ionicons name={item.icon} size={20} color={C.primaryText} />
                   <Text style={styles.quickLinkText} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
+            {vecuDates.length > 0 && (<>
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>{t("Dates vécus")}</Text>
@@ -593,6 +595,7 @@ export default function Profile() {
               <Text style={styles.statLabel}>{t("Meilleur date")}</Text>
               <Text style={styles.statValueSmall}>{meilleurLieu}</Text>
             </View>
+            </>)}
 
             {(() => {
               if (!monthlyGoal || monthlyGoal <= 0) return null
@@ -603,7 +606,7 @@ export default function Profile() {
               return (
                 <View style={styles.goalCard}>
                   <View style={styles.goalHeader}>
-                    <Text style={styles.goalLabel}>{t("🎯 Objectif du mois")}</Text>
+                    <Text style={styles.goalLabel}>{t("Objectif du mois")}</Text>
                     <Text style={styles.goalCount}>{t("{fait}/{objectif} dates", { fait: thisMonthCount, objectif: monthlyGoal })}</Text>
                   </View>
                   <View style={styles.goalTrack}>
@@ -611,7 +614,7 @@ export default function Profile() {
                     {pct < 1 && <View style={{ flex: 1 - pct }} />}
                   </View>
                   {thisMonthCount >= monthlyGoal && (
-                    <Text style={styles.goalDone}>{t("🎉 Objectif atteint !")}</Text>
+                    <Text style={styles.goalDone}>{t("Objectif atteint !")}</Text>
                   )}
                 </View>
               )
@@ -620,7 +623,7 @@ export default function Profile() {
             {filteredPlanifie.length > 0 && (
               <TouchableOpacity style={styles.planifieSummary} onPress={() => setPlanifieModalVisible(true)} activeOpacity={0.8}>
                 <View style={styles.planifieSummaryIcon}>
-                  <Ionicons name="calendar" size={18} color="#D4517E" />
+                  <Ionicons name="calendar" size={18} color={C.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.planifieSummaryTitle}>
@@ -631,15 +634,16 @@ export default function Profile() {
                     {filteredPlanifie.length > 1 ? ` ${tn(filteredPlanifie.length - 1, "+{n} autre", "+{n} autres")}` : ''}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#B8A9A0" />
+                <Ionicons name="chevron-forward" size={18} color={C.faint} />
               </TouchableOpacity>
             )}
 
+            {vecuDates.length >= 4 && (<>
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
                 placeholder={t("Rechercher un date...")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 clearButtonMode="while-editing"
@@ -677,7 +681,9 @@ export default function Profile() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            </>)}
 
+            {vecuDates.length > 0 && (
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>{t("Historique")} ({vecuDates.length})</Text>
               <View style={styles.viewToggle}>
@@ -685,26 +691,27 @@ export default function Profile() {
                   style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
                   onPress={() => { setViewMode('list'); setSelectedDay(null) }}
                 >
-                  <Ionicons name="list" size={16} color={viewMode === 'list' ? '#fff' : '#B8A9A0'} />
+                  <Ionicons name="list" size={16} color={viewMode === 'list' ? C.onPrimary : C.faint} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.viewToggleBtn, viewMode === 'calendar' && styles.viewToggleBtnActive]}
                   onPress={() => setViewMode('calendar')}
                 >
-                  <Ionicons name="calendar" size={16} color={viewMode === 'calendar' ? '#fff' : '#B8A9A0'} />
+                  <Ionicons name="calendar" size={16} color={viewMode === 'calendar' ? C.onPrimary : C.faint} />
                 </TouchableOpacity>
               </View>
             </View>
+            )}
 
             {viewMode === 'calendar' && (
               <View style={styles.calendarBox}>
                 <View style={styles.calHeader}>
                   <TouchableOpacity onPress={() => { setSelectedDay(null); setCalMonth((p) => { const d = new Date(p.year, p.month - 1); return { year: d.getFullYear(), month: d.getMonth() } }) }}>
-                    <Ionicons name="chevron-back" size={20} color="#D4517E" />
+                    <Ionicons name="chevron-back" size={20} color={C.primary} />
                   </TouchableOpacity>
                   <Text style={styles.calMonthLabel}>{CAL_MOIS[calMonth.month]} {calMonth.year}</Text>
                   <TouchableOpacity onPress={() => { setSelectedDay(null); setCalMonth((p) => { const d = new Date(p.year, p.month + 1); return { year: d.getFullYear(), month: d.getMonth() } }) }}>
-                    <Ionicons name="chevron-forward" size={20} color="#D4517E" />
+                    <Ionicons name="chevron-forward" size={20} color={C.primary} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.calGrid}>
@@ -730,10 +737,12 @@ export default function Profile() {
               </View>
             )}
 
-            {loading && <ActivityIndicator color="#D4517E" style={{ marginTop: 20 }} />}
+            {loading && dates.length === 0 && <SkeletonList count={2} />}
             {!loading && vecuDates.length === 0 && (
               <View style={styles.emptyBox}>
-                <Text style={styles.emptyIcon}>📝</Text>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="create-outline" size={28} color={C.primaryText} />
+                </View>
                 <Text style={styles.emptyTitle}>{t("Aucun date noté pour l'instant")}</Text>
                 <Text style={styles.emptySub}>{t("Note ta première sortie pour commencer ton historique")}</Text>
                 <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/(tabs)/rate')}>
@@ -747,7 +756,8 @@ export default function Profile() {
           <View style={styles.dateCard}>
             {item.conseil_vivement && (
               <View style={styles.conseilBadge}>
-                <Text style={styles.conseilBadgeText}>{t("💖 Conseillé vivement")}</Text>
+                <Ionicons name="heart" size={11} color={C.primaryText} />
+                <Text style={styles.conseilBadgeText}>{t("Conseillé vivement")}</Text>
               </View>
             )}
             <View style={styles.dateCardHeader}>
@@ -755,13 +765,16 @@ export default function Profile() {
                 {item.intitule ? (
                   <>
                     <Text style={styles.dateTitre}>{item.intitule}</Text>
-                    <Text style={styles.dateLieu}>📍 {item.lieu}</Text>
+                    <View style={styles.iconLine}>
+                      <Ionicons name="location-outline" size={12} color={C.muted} />
+                      <Text style={styles.dateLieu}>{item.lieu}</Text>
+                    </View>
                   </>
                 ) : (
                   <Text style={styles.dateLieu}>{item.lieu}</Text>
                 )}
               </View>
-              <Text style={styles.dateNote}>{item.note_globale}/20</Text>
+              <Text style={styles.dateNote}>{formatNote(item.note_globale)}/20</Text>
             </View>
             <Text style={styles.dateDate}>{formaterDate(item.date_du_date)}</Text>
 
@@ -804,11 +817,7 @@ export default function Profile() {
             <Text style={styles.empty}>{t("Aucun résultat pour « {q} »", { q: searchQuery })}</Text>
           ) : null
         }
-        ListFooterComponent={
-          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-            <Text style={styles.signOutText}>{t("Se déconnecter")}</Text>
-          </TouchableOpacity>
-        }
+        ListFooterComponent={<View style={{ height: 24 }} />}
       />
 
       {viewer && (
@@ -839,12 +848,12 @@ export default function Profile() {
                   style={styles.marquerVecuBtn}
                   onPress={() => setEditData((prev) => ({ ...prev, statut: 'vecu' }))}
                 >
-                  <Text style={styles.marquerVecuText}>{t("✓ Marquer comme vécu")}</Text>
+                  <Text style={styles.marquerVecuText}><Ionicons name="checkmark-circle" size={15} color={C.onPrimary} /> {t("Marquer comme vécu")}</Text>
                 </TouchableOpacity>
               )}
               {editData.statut === 'vecu' && editingDate?.statut === 'planifie' && (
                 <View style={styles.vecuBanner}>
-                  <Text style={styles.vecuBannerText}>{t("✓ Ce date sera déplacé dans l'historique")}</Text>
+                  <Text style={styles.vecuBannerText}>{t("Ce date sera déplacé dans l'historique")}</Text>
                 </View>
               )}
 
@@ -854,7 +863,7 @@ export default function Profile() {
                 value={editData.intitule}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, intitule: v }))}
                 placeholder={t("Ex : Dîner romantique, Soirée ciné...")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
               />
 
               <Text style={styles.label}>{t("Lieu")}</Text>
@@ -863,7 +872,7 @@ export default function Profile() {
                 value={editData.lieu}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, lieu: v }))}
                 placeholder={t("Lieu du date")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
               />
 
               <Text style={styles.label}>{t("Date")}</Text>
@@ -896,13 +905,13 @@ export default function Profile() {
                   minimumValue={0} maximumValue={20} step={0.25}
                   value={editData.noteGlobale}
                   onValueChange={(v) => setEditData((prev) => ({ ...prev, noteGlobale: v }))}
-                  minimumTrackTintColor="#D4517E" maximumTrackTintColor="#F0D9D9" thumbTintColor="#D4517E"
+                  minimumTrackTintColor={C.primary} maximumTrackTintColor={C.border} thumbTintColor={C.primary}
                 />
               </View>
 
               <Text style={styles.sectionTitle}>{t("Détails")}</Text>
               {loadingEditData ? (
-                <ActivityIndicator color="#D4517E" style={{ marginVertical: 12 }} />
+                <ActivityIndicator color={C.primary} style={{ marginVertical: 12 }} />
               ) : (
                 CRITERES.map((c) => (
                   <View key={c.key} style={styles.critereBox}>
@@ -915,7 +924,7 @@ export default function Profile() {
                       minimumValue={0} maximumValue={5} step={0.25}
                       value={editData.ratings[c.key as keyof EditRatings]}
                       onValueChange={(v) => updateEditRating(c.key, v)}
-                      minimumTrackTintColor="#D4517E" maximumTrackTintColor="#F0D9D9" thumbTintColor="#D4517E"
+                      minimumTrackTintColor={C.primary} maximumTrackTintColor={C.border} thumbTintColor={C.primary}
                     />
                   </View>
                 ))
@@ -928,16 +937,16 @@ export default function Profile() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.conseilLabel, editData.conseilVivement && styles.conseilLabelActive]}>
-                    {t("💖 Je conseille vivement")}
+                    <Ionicons name="heart" size={14} color={editData.conseilVivement ? C.primaryText : C.text} /> {t("Je conseille vivement")}
                   </Text>
                   <Text style={styles.conseilSubtext}>{t("Mis en avant sur le feed de tes amis")}</Text>
                 </View>
                 <Switch
                   value={editData.conseilVivement}
                   onValueChange={(v) => setEditData((prev) => ({ ...prev, conseilVivement: v }))}
-                  trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
+                  trackColor={{ false: C.border, true: C.primary }}
                   thumbColor="#fff"
-                  ios_backgroundColor="#F0D9D9"
+                  ios_backgroundColor={C.border}
                 />
               </TouchableOpacity>
               </>)}
@@ -947,13 +956,13 @@ export default function Profile() {
                   style={[styles.statutBtn, editData.visibilite === 'friends' && styles.statutBtnActive]}
                   onPress={() => setEditData((prev) => ({ ...prev, visibilite: 'friends' }))}
                 >
-                  <Text style={[styles.statutBtnText, editData.visibilite === 'friends' && styles.statutBtnTextActive]}>{t("👫 Visible par mes amis")}</Text>
+                  <Text style={[styles.statutBtnText, editData.visibilite === 'friends' && styles.statutBtnTextActive]}><Ionicons name="people" size={13} /> {t("Visible par mes amis")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.statutBtn, editData.visibilite === 'private' && styles.statutBtnActive]}
                   onPress={() => setEditData((prev) => ({ ...prev, visibilite: 'private' }))}
                 >
-                  <Text style={[styles.statutBtnText, editData.visibilite === 'private' && styles.statutBtnTextActive]}>{t("🔒 Privé")}</Text>
+                  <Text style={[styles.statutBtnText, editData.visibilite === 'private' && styles.statutBtnTextActive]}><Ionicons name="lock-closed" size={13} /> {t("Privé")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -963,7 +972,7 @@ export default function Profile() {
                 value={editData.commentaire}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, commentaire: v }))}
                 placeholder={t("Raconte ton date...")}
-                placeholderTextColor="#B8A9A0"
+                placeholderTextColor={C.faint}
                 multiline
                 numberOfLines={4}
               />
@@ -1018,7 +1027,7 @@ export default function Profile() {
           {uploadingPhotos && (
             <View style={styles.uploadOverlay}>
               <View style={styles.uploadCard}>
-                <ActivityIndicator color="#D4517E" size="large" />
+                <ActivityIndicator color={C.primary} size="large" />
                 <Text style={styles.uploadTitle}>{t("Envoi des photos")}</Text>
                 <Text style={styles.uploadCount}>{uploadProgress.current} / {uploadProgress.total}</Text>
                 <View style={styles.progressTrack}>
@@ -1033,12 +1042,35 @@ export default function Profile() {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
+        <TouchableOpacity style={styles.moreBackdrop} activeOpacity={1} onPress={() => setMoreOpen(false)}>
+          <View style={styles.moreSheet}>
+            <Text style={styles.moreTitle}>{t("Plus")}</Text>
+            {[
+              { icon: 'sparkles-outline' as const, label: t("Récap"), onPress: () => router.push('/recap') },
+              { icon: 'trophy-outline' as const, label: t("Classement"), onPress: () => router.push('/leaderboard') },
+              { icon: 'ribbon-outline' as const, label: t("Badges"), onPress: () => router.push('/badges') },
+              { icon: 'search-outline' as const, label: t("Recherche"), onPress: () => router.push('/search') },
+              { icon: 'bookmark-outline' as const, label: t("Favoris"), onPress: () => router.push('/favorites') },
+              { icon: 'share-social-outline' as const, label: t("Partager mon profil"), onPress: shareProfile },
+              { icon: 'settings-outline' as const, label: t("Paramètres"), onPress: () => router.push('/settings') },
+            ].map((item) => (
+              <TouchableOpacity key={item.label} style={styles.moreRow} onPress={() => { setMoreOpen(false); item.onPress() }}>
+                <Ionicons name={item.icon} size={20} color={C.primaryText} />
+                <Text style={styles.moreRowText}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color={C.faint} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={planifieModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPlanifieModalVisible(false)}>
         <SafeAreaView style={styles.modalSafe} edges={['top']}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t("Dates planifiés")}</Text>
             <TouchableOpacity onPress={() => setPlanifieModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={24} color="#5C4A45" />
+              <Ionicons name="close" size={24} color={C.text} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody}>
@@ -1050,152 +1082,159 @@ export default function Profile() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  container: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: C.bg },
   content: { padding: 20, paddingBottom: 60 },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: '600', color: '#D4517E' },
+  title: { fontSize: 28, fontWeight: '800', color: C.primaryText, letterSpacing: -0.3 },
+  iconLine: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  emptyIconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  moreBackdrop: { flex: 1, backgroundColor: C.overlay, justifyContent: 'flex-end' },
+  moreSheet: { backgroundColor: C.card, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  moreTitle: { fontSize: 17, fontWeight: '800', color: C.text, marginBottom: 6 },
+  moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  moreRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: C.text },
   settingsBtn: { padding: 4 },
   settingsBtnText: { fontSize: 22 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8, marginBottom: 6 },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 24, fontWeight: '700', color: '#D4517E' },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.border },
+  avatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 24, fontWeight: '700', color: C.primaryText },
   avatarInfo: { flex: 1 },
-  email: { fontSize: 13, color: '#888', marginTop: 1 },
-  username: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
+  email: { fontSize: 13, color: C.muted, marginTop: 1 },
+  username: { fontSize: 16, fontWeight: '700', color: C.primaryText },
   quickLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8, marginBottom: 16, marginTop: 12 },
-  quickLink: { alignItems: 'center', gap: 4, backgroundColor: '#FDE8F0', width: '19%', paddingVertical: 10, paddingHorizontal: 2, borderRadius: 14 },
-  quickLinkText: { color: '#D4517E', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  quickLink: { alignItems: 'center', gap: 4, backgroundColor: C.primarySoft, width: '18.5%', paddingVertical: 12, paddingHorizontal: 2, borderRadius: 16 },
+  quickLinkText: { color: C.primaryText, fontSize: 11, fontWeight: '600', textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  statCardFull: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9', marginBottom: 20 },
-  statLabel: { fontSize: 12, color: '#888' },
-  statValue: { fontSize: 22, fontWeight: '700', color: '#D4517E', marginTop: 4 },
-  statValueSmall: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginTop: 4 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 8, marginTop: 4 },
+  statCard: { flex: 1, backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.border },
+  statCardFull: { backgroundColor: C.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
+  statLabel: { fontSize: 12, color: C.muted },
+  statValue: { fontSize: 22, fontWeight: '700', color: C.primaryText, marginTop: 4 },
+  statValueSmall: { fontSize: 16, fontWeight: '600', color: C.text, marginTop: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: C.text, marginBottom: 8, marginTop: 4 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 4 },
-  viewToggle: { flexDirection: 'row', backgroundColor: '#F0D9D9', borderRadius: 8, padding: 2, gap: 2 },
+  viewToggle: { flexDirection: 'row', backgroundColor: C.border, borderRadius: 8, padding: 2, gap: 2 },
   viewToggleBtn: { padding: 5, borderRadius: 6 },
-  viewToggleBtnActive: { backgroundColor: '#D4517E' },
-  calendarBox: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#F0D9D9' },
+  viewToggleBtnActive: { backgroundColor: C.primary },
+  calendarBox: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: C.border },
   calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  calMonthLabel: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
+  calMonthLabel: { fontSize: 15, fontWeight: '700', color: C.text },
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calDow: { width: '14.28%', textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#B8A9A0', paddingBottom: 6 },
+  calDow: { width: '14.28%', textAlign: 'center', fontSize: 11, fontWeight: '700', color: C.faint, paddingBottom: 6 },
   calCell: { width: '14.28%', alignItems: 'center', paddingVertical: 4, borderRadius: 8 },
-  calCellSel: { backgroundColor: '#D4517E' },
-  calDay: { fontSize: 13, fontWeight: '500', color: '#5C4A45' },
-  calDaySel: { color: '#fff', fontWeight: '700' },
-  calDayEmpty: { color: '#D0C5C0' },
-  calDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#D4517E', marginTop: 2 },
-  calDotSel: { backgroundColor: '#fff' },
+  calCellSel: { backgroundColor: C.primary },
+  calDay: { fontSize: 13, fontWeight: '500', color: C.text },
+  calDaySel: { color: C.onPrimary, fontWeight: '700' },
+  calDayEmpty: { color: C.borderStrong },
+  calDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.primary, marginTop: 2 },
+  calDotSel: { backgroundColor: C.card },
   calClear: { alignItems: 'center', paddingTop: 8 },
-  calClearText: { fontSize: 12, color: '#B8A9A0' },
-  empty: { color: '#888', textAlign: 'center', marginTop: 20 },
-  emptyBox: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 24, marginTop: 8, borderWidth: 1, borderColor: '#F0D9D9' },
+  calClearText: { fontSize: 12, color: C.faint },
+  empty: { color: C.muted, textAlign: 'center', marginTop: 20 },
+  emptyBox: { alignItems: 'center', backgroundColor: C.card, borderRadius: 16, padding: 24, marginTop: 8, borderWidth: 1, borderColor: C.border },
   emptyIcon: { fontSize: 36, marginBottom: 8 },
-  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
-  emptySub: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 16, textAlign: 'center' },
-  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
-  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  dateCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
-  conseilBadge: { backgroundColor: '#FDE8F0', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 8, alignSelf: 'flex-start' },
-  conseilBadgeText: { fontSize: 11, fontWeight: '700', color: '#D4517E' },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: C.text },
+  emptySub: { fontSize: 13, color: C.muted, marginTop: 4, marginBottom: 16, textAlign: 'center' },
+  emptyCta: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  emptyCtaText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  dateCard: { backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  conseilBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.primarySoft, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 8, alignSelf: 'flex-start' },
+  conseilBadgeText: { fontSize: 11, fontWeight: '700', color: C.primaryText },
   dateCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  dateTitre: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 2 },
-  dateLieu: { fontSize: 13, color: '#888' },
-  dateNote: { fontSize: 15, fontWeight: '700', color: '#D4517E' },
-  dateDate: { fontSize: 12, color: '#888', marginTop: 2 },
-  dateComment: { fontSize: 13, color: '#5C4A45', marginTop: 6 },
+  dateTitre: { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 2 },
+  dateLieu: { fontSize: 13, color: C.muted },
+  dateNote: { fontSize: 15, fontWeight: '700', color: C.primaryText },
+  dateDate: { fontSize: 12, color: C.muted, marginTop: 2 },
+  dateComment: { fontSize: 13, color: C.text, marginTop: 6 },
   photoRow: { marginTop: 10, marginBottom: 4, minWidth: 0 },
-  feedPhoto: { width: 160, height: 160, borderRadius: 10, marginRight: 8, backgroundColor: '#F0D9D9' },
+  feedPhoto: { width: 160, height: 160, borderRadius: 10, marginRight: 8, backgroundColor: C.border },
   dateActions: { flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' },
-  confirmText: { flex: 1, fontSize: 13, color: '#D85A30', fontWeight: '500' },
-  dateCardPlanifie: { borderColor: '#B8A9A0', borderStyle: 'dashed' },
-  planifieSummary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  planifieSummaryIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  planifieSummaryTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45' },
-  planifieSummarySub: { fontSize: 12, color: '#888', marginTop: 2 },
-  planifieBadge: { backgroundColor: '#F0F0F0', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
-  planifieText: { fontSize: 11, fontWeight: '600', color: '#888' },
+  confirmText: { flex: 1, fontSize: 13, color: C.danger, fontWeight: '500' },
+  dateCardPlanifie: { borderColor: C.faint, borderStyle: 'dashed' },
+  planifieSummary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  planifieSummaryIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  planifieSummaryTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  planifieSummarySub: { fontSize: 12, color: C.muted, marginTop: 2 },
+  planifieBadge: { backgroundColor: C.border, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  planifieText: { fontSize: 11, fontWeight: '600', color: C.muted },
   searchRow: { marginBottom: 8 },
-  searchInput: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 14 },
+  searchInput: { backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: C.border, fontSize: 14 },
   catFilterRow: { marginBottom: 12, minWidth: 0 },
-  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
-  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
-  catFilterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  catFilterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  catFilterText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
-  catFilterTextActive: { color: '#fff', fontWeight: '700' },
-  marquerVecuBtn: { backgroundColor: '#D4517E', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 16 },
-  marquerVecuText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  vecuBanner: { backgroundColor: '#EAF3DE', borderRadius: 10, padding: 12, marginBottom: 16 },
-  vecuBannerText: { color: '#3B6D11', fontWeight: '600', fontSize: 13 },
-  editBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#D4517E' },
-  editBtnText: { color: '#D4517E', fontSize: 13, fontWeight: '600' },
-  deleteBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#D85A30' },
-  deleteBtnText: { color: '#D85A30', fontSize: 13, fontWeight: '600' },
-  signOutButton: { marginTop: 20, padding: 14, alignItems: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  signOutText: { color: '#D85A30', fontWeight: '600' },
+  errorBanner: { backgroundColor: C.errorBg, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: C.errorText, fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
+  catFilterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  catFilterChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  catFilterText: { fontSize: 12, color: C.text, fontWeight: '500' },
+  catFilterTextActive: { color: C.onPrimary, fontWeight: '700' },
+  marquerVecuBtn: { backgroundColor: C.primary, borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 16 },
+  marquerVecuText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+  vecuBanner: { backgroundColor: C.successBg, borderRadius: 10, padding: 12, marginBottom: 16 },
+  vecuBannerText: { color: C.success, fontWeight: '600', fontSize: 13 },
+  editBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.primary },
+  editBtnText: { color: C.primaryText, fontSize: 13, fontWeight: '600' },
+  deleteBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.danger },
+  deleteBtnText: { color: C.danger, fontSize: 13, fontWeight: '600' },
+  signOutButton: { marginTop: 20, padding: 14, alignItems: 'center', borderRadius: 12, borderWidth: 1, borderColor: C.border },
+  signOutText: { color: C.danger, fontWeight: '600' },
   // Modal
-  modalSafe: { flex: 1, backgroundColor: '#FFF8F5' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
-  modalTitle: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
-  modalCancel: { fontSize: 15, color: '#888' },
-  modalSave: { fontSize: 15, fontWeight: '600', color: '#D4517E' },
+  modalSafe: { flex: 1, backgroundColor: C.bg },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  modalTitle: { fontSize: 16, fontWeight: '600', color: C.text },
+  modalCancel: { fontSize: 15, color: C.muted },
+  modalSave: { fontSize: 15, fontWeight: '600', color: C.primaryText },
   modalBody: { padding: 20 },
-  label: { fontSize: 14, fontWeight: '500', color: '#5C4A45', marginBottom: 8 },
-  labelOptional: { fontSize: 12, fontWeight: '400', color: '#B8A9A0' },
-  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 15 },
+  label: { fontSize: 14, fontWeight: '500', color: C.text, marginBottom: 8 },
+  labelOptional: { fontSize: 12, fontWeight: '400', color: C.faint },
+  input: { backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border, fontSize: 15 },
   textarea: { height: 100, textAlignVertical: 'top' },
-  globalNoteBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  globalNoteValue: { fontSize: 28, fontWeight: '700', color: '#D4517E', textAlign: 'center', marginVertical: 4 },
-  conseilRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
-  conseilRowActive: { borderColor: '#D4517E', backgroundColor: '#FDE8F0' },
-  conseilLabel: { fontSize: 14, fontWeight: '600', color: '#5C4A45', marginBottom: 2 },
-  conseilLabelActive: { color: '#D4517E' },
-  conseilSubtext: { fontSize: 12, color: '#888' },
+  globalNoteBox: { backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  globalNoteValue: { fontSize: 28, fontWeight: '700', color: C.primaryText, textAlign: 'center', marginVertical: 4 },
+  conseilRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  conseilRowActive: { borderColor: C.primary, backgroundColor: C.primarySoft },
+  conseilLabel: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
+  conseilLabelActive: { color: C.primaryText },
+  conseilSubtext: { fontSize: 12, color: C.muted },
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  categoryChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  categoryChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  categoryChipText: { fontSize: 13, color: '#5C4A45', fontWeight: '500' },
-  categoryChipTextActive: { color: '#fff', fontWeight: '700' },
+  categoryChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  categoryChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  categoryChipText: { fontSize: 13, color: C.text, fontWeight: '500' },
+  categoryChipTextActive: { color: C.onPrimary, fontWeight: '700' },
   visibiliteRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  statutBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', alignItems: 'center', backgroundColor: '#fff' },
-  statutBtnActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
-  statutBtnText: { fontSize: 14, fontWeight: '600', color: '#5C4A45' },
-  statutBtnTextActive: { color: '#fff' },
-  critereBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
+  statutBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: 'center', backgroundColor: C.card },
+  statutBtnActive: { backgroundColor: C.primary, borderColor: C.primary },
+  statutBtnText: { fontSize: 14, fontWeight: '600', color: C.text },
+  statutBtnTextActive: { color: C.onPrimary },
+  critereBox: { backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
   critereHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  critereValue: { fontSize: 14, fontWeight: '600', color: '#D4517E' },
+  critereValue: { fontSize: 14, fontWeight: '600', color: C.primaryText },
   photoGallery: { marginBottom: 24, minWidth: 0 },
   photoThumbWrapper: { position: 'relative', marginRight: 10 },
-  photoThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: '#F0D9D9' },
-  newPhotoBadge: { position: 'absolute', bottom: 4, left: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4517E' },
-  photoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: '#D85A30', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  photoRemoveText: { color: '#fff', fontWeight: '700', fontSize: 14, lineHeight: 16 },
-  photoAddButton: { width: 90, height: 90, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-  photoAddText: { fontSize: 28, color: '#B8A9A0' },
+  photoThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: C.border },
+  newPhotoBadge: { position: 'absolute', bottom: 4, left: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  photoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: C.danger, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  photoRemoveText: { color: C.onPrimary, fontWeight: '700', fontSize: 14, lineHeight: 16 },
+  photoAddButton: { width: 90, height: 90, borderRadius: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  photoAddText: { fontSize: 28, color: C.faint },
   // Upload overlay
   uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-  uploadCard: { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 260, gap: 10 },
-  uploadTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45', marginTop: 4 },
-  uploadCount: { fontSize: 14, color: '#888' },
-  progressTrack: { flexDirection: 'row', width: '100%', height: 6, backgroundColor: '#F0D9D9', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { backgroundColor: '#D4517E' },
-  goalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
+  uploadCard: { backgroundColor: C.card, borderRadius: 20, padding: 32, alignItems: 'center', width: '100%', maxWidth: 260, gap: 10 },
+  uploadTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginTop: 4 },
+  uploadCount: { fontSize: 14, color: C.muted },
+  progressTrack: { flexDirection: 'row', width: '100%', height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { backgroundColor: C.primary },
+  goalCard: { backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.border },
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  goalLabel: { fontSize: 14, fontWeight: '600', color: '#5C4A45' },
-  goalCount: { fontSize: 14, fontWeight: '700', color: '#D4517E' },
-  goalTrack: { flexDirection: 'row', height: 8, backgroundColor: '#F0D9D9', borderRadius: 4, overflow: 'hidden' },
-  goalFill: { backgroundColor: '#D4517E', borderRadius: 4 },
+  goalLabel: { fontSize: 14, fontWeight: '600', color: C.text },
+  goalCount: { fontSize: 14, fontWeight: '700', color: C.primaryText },
+  goalTrack: { flexDirection: 'row', height: 8, backgroundColor: C.border, borderRadius: 4, overflow: 'hidden' },
+  goalFill: { backgroundColor: C.primary, borderRadius: 4 },
   goalDone: { fontSize: 13, color: '#2D6A2D', fontWeight: '600', marginTop: 6 },
   advFilterRow: { marginBottom: 10, flexGrow: 0, minWidth: 0 },
-  advChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
-  advChipActive: { backgroundColor: '#5C4A45', borderColor: '#5C4A45' },
-  advChipText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },
-  advChipTextActive: { color: '#fff', fontWeight: '700' },
-})
+  advChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+  advChipActive: { backgroundColor: C.text, borderColor: C.text },
+  advChipText: { fontSize: 12, color: C.text, fontWeight: '500' },
+  advChipTextActive: { color: C.onPrimary, fontWeight: '700' },
+}))

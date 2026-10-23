@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 export default function Consent() {
   const [saving, setSaving] = useState(false)
@@ -41,16 +43,16 @@ export default function Consent() {
         </Text>
 
         <TouchableOpacity style={styles.linkCard} onPress={() => router.push('/terms')}>
-          <Text style={styles.linkCardText}>{t("📄 Lire les conditions d'utilisation (CGU)")}</Text>
+          <Text style={styles.linkCardText}><Ionicons name="document-text-outline" size={15} color={C.primaryText} /> {t("Lire les conditions d'utilisation (CGU)")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.linkCard} onPress={() => router.push('/privacy')}>
-          <Text style={styles.linkCardText}>{t("🔒 Lire la politique de confidentialité")}</Text>
+          <Text style={styles.linkCardText}><Ionicons name="lock-closed-outline" size={15} color={C.primaryText} /> {t("Lire la politique de confidentialité")}</Text>
         </TouchableOpacity>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity style={styles.acceptButton} onPress={accept} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptButtonText}>{t("J'accepte et je continue")}</Text>}
+          {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.acceptButtonText}>{t("J'accepte et je continue")}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={styles.declineButton} onPress={decline} disabled={saving}>
           <Text style={styles.declineButtonText}>{t("Je refuse (déconnexion)")}</Text>
@@ -60,16 +62,16 @@ export default function Consent() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
   content: { padding: 24, paddingTop: 60, paddingBottom: 60, flexGrow: 1, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '700', color: '#D4517E', textAlign: 'center', marginBottom: 10 },
-  subtitle: { fontSize: 14, color: '#5C4A45', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  linkCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
-  linkCardText: { fontSize: 14, color: '#5C4A45', fontWeight: '600', textAlign: 'center' },
-  error: { color: '#D85A30', textAlign: 'center', marginTop: 8 },
-  acceptButton: { backgroundColor: '#D4517E', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
-  acceptButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  title: { fontSize: 24, fontWeight: '700', color: C.primaryText, textAlign: 'center', marginBottom: 10 },
+  subtitle: { fontSize: 14, color: C.text, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  linkCard: { backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  linkCardText: { fontSize: 14, color: C.text, fontWeight: '600', textAlign: 'center' },
+  error: { color: C.danger, textAlign: 'center', marginTop: 8 },
+  acceptButton: { backgroundColor: C.primary, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
+  acceptButtonText: { color: C.onPrimary, fontWeight: '700', fontSize: 16 },
   declineButton: { padding: 14, alignItems: 'center', marginTop: 4 },
-  declineButtonText: { color: '#888', fontWeight: '600', fontSize: 14 },
-})
+  declineButtonText: { color: C.muted, fontWeight: '600', fontSize: 14 },
+}))

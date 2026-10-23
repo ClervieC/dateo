@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { feedBadgeStore } from '../../lib/feedBadgeStore'
 import { t } from '../../lib/i18n'
+import { C } from '../../lib/theme'
 
 export default function TabsLayout() {
   const [pendingCount, setPendingCount] = useState(0)
@@ -49,16 +50,16 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#D4517E',
-        tabBarInactiveTintColor: '#B8A9A0',
+        tabBarActiveTintColor: C.primary,
+        tabBarInactiveTintColor: C.faint,
         // Sur le web, la barre fait 49 px par défaut alors qu'un onglet en demande ~53
         // (5 px de marge interne + icône 28 px + libellé ~15 px + 5 px) : le bas des
         // libellés était coupé. On lui donne 62 px, plus la zone de la barre de geste de
         // l'iPhone. Ne pas ajouter de padding via tabBarItemStyle : il s'applique au
         // conteneur extérieur et s'additionne à la marge interne de l'onglet.
         tabBarStyle: Platform.OS === 'web'
-          ? { backgroundColor: '#FFF8F5', borderTopColor: '#F0D9D9', height: 62 + insets.bottom, paddingTop: 4, paddingBottom: insets.bottom }
-          : { backgroundColor: '#FFF8F5', borderTopColor: '#F0D9D9' },
+          ? { backgroundColor: C.bg, borderTopColor: C.border, height: 62 + insets.bottom, paddingTop: 4, paddingBottom: insets.bottom }
+          : { backgroundColor: C.bg, borderTopColor: C.border },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
@@ -68,7 +69,7 @@ export default function TabsLayout() {
           title: t("Feed"),
           tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
           tabBarBadge: feedBadge > 0 ? feedBadge : undefined,
-          tabBarBadgeStyle: { backgroundColor: '#D4517E' },
+          tabBarBadgeStyle: { backgroundColor: C.primary },
         }}
       />
       <Tabs.Screen
@@ -91,7 +92,7 @@ export default function TabsLayout() {
           title: t("Profil"),
           tabBarIcon: ({ color, size }) => <Ionicons name="person" color={color} size={size} />,
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: '#D4517E' },
+          tabBarBadgeStyle: { backgroundColor: C.primary },
         }}
       />
     </Tabs>

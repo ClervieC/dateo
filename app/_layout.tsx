@@ -10,6 +10,9 @@ import { refreshUnreadNotifications, watchNotifications } from '../lib/notificat
 import { loadProfileState } from '../lib/profileSetup'
 import { useBottomTabs } from '../lib/useBottomTabs'
 import { t, tKey, initLanguage, useLang } from '../lib/i18n'
+import { C, themedStyles, initTheme, useThemeName, setFontsReady } from '../lib/theme'
+import { StatusBar } from 'expo-status-bar'
+import { useFonts, Nunito_400Regular, Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold } from '@expo-google-fonts/nunito'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -112,9 +115,14 @@ export default function RootLayout() {
   const bottomTabs = useBottomTabs()
   // Changer de langue remonte la navigation (key) pour que tous les écrans se ré-affichent
   const lang = useLang()
+  const themeName = useThemeName()
+  const [fontsLoaded, fontError] = useFonts({ Nunito_400Regular, Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold })
+  // Si la police ne charge pas (hors ligne au premier lancement), on garde celle du système
+  const fontsDone = fontsLoaded || !!fontError
+  setFontsReady(fontsLoaded)
 
   useEffect(() => {
-    Promise.all([supabase.auth.getSession(), initLanguage()]).then(([{ data: { session } }]) => {
+    Promise.all([supabase.auth.getSession(), initLanguage(), initTheme()]).then(([{ data: { session } }]) => {
       setSession(session)
       setLoading(false)
       if (session) registerPushToken()
@@ -186,10 +194,10 @@ export default function RootLayout() {
     return () => { cancelled = true }
   }, [session, loading, segmentKey])
 
-  if (loading) {
+  if (loading || !fontsDone) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color="#D4517E" size="large" />
+        <ActivityIndicator color={C.primary} size="large" />
       </View>
     )
   }
@@ -200,25 +208,31 @@ export default function RootLayout() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webRoot}>
+        <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
         {session && !hideWebNav && !bottomTabs && <WebNavBar />}
-        <Stack key={lang} screenOptions={{ headerShown: false }} />
+        <Stack key={`${lang}-${themeName}`} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }} />
       </View>
     )
   }
 
-  return <Stack key={lang} screenOptions={{ headerShown: false }} />
+  return (
+    <>
+      <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
+      <Stack key={`${lang}-${themeName}`} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }} />
+    </>
+  )
 }
 
-const styles = StyleSheet.create({
-  loading: { flex: 1, backgroundColor: '#FFF8F5', justifyContent: 'center', alignItems: 'center' },
-  webRoot: { flex: 1, backgroundColor: '#FFF8F5' },
-})
+const styles = themedStyles(() => ({
+  loading: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' },
+  webRoot: { flex: 1, backgroundColor: C.bg },
+}))
 
-const webStyles = StyleSheet.create({
+const webStyles = themedStyles(() => ({
   nav: {
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0D9D9',
+    borderBottomColor: C.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -233,15 +247,15 @@ const webStyles = StyleSheet.create({
   rightGroup: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   links: { flexDirection: 'row' },
   link: { height: 60, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
-  linkText: { fontSize: 14, fontWeight: '500', color: '#888' },
-  linkTextActive: { color: '#D4517E', fontWeight: '600' },
+  linkText: { fontSize: 14, fontWeight: '500', color: C.muted },
+  linkTextActive: { color: C.primaryText, fontWeight: '600' },
   linkUnderline: {
     position: 'absolute',
     bottom: 0,
     left: 20,
     right: 20,
     height: 2,
-    backgroundColor: '#D4517E',
+    backgroundColor: C.primary,
     borderRadius: 1,
   },
-})
+}))

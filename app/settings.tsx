@@ -13,9 +13,11 @@ import { useUsernameCheck } from '../lib/useUsernameCheck'
 import { MIN_PASSWORD_LENGTH, traduireErreurAuth } from '../lib/authErrors'
 import { confirmAction } from '../lib/alert'
 import { LanguageSwitcher } from '../lib/LanguageSwitcher'
+import { ThemeSwitcher } from '../lib/ThemeSwitcher'
 import { CRITERES } from '../lib/criteres'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 export default function Settings() {
   const [email, setEmail] = useState('')
@@ -53,24 +55,33 @@ export default function Settings() {
   const router = useRouter()
   const usernameCheck = useUsernameCheck(newUsername, username)
 
-  useEffect(() => {
-    async function load() {
+  const [loadError, setLoadError] = useState(false)
+
+  // En cas d'échec (réseau, session expirée), on affiche une erreur avec « Réessayer »
+  // plutôt qu'une roue de chargement infinie.
+  async function load() {
+    setLoading(true)
+    setLoadError(false)
+    try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setLoadError(true); return }
       setUserId(user.id)
       setEmail(user.email ?? '')
-      const { data } = await supabase.from('profiles').select('username, avatar_url, monthly_goal, ville').eq('id', user.id).single()
-      if (data) {
-        setUsername(data.username)
-        setNewUsername(data.username)
-        setAvatarUrl(data.avatar_url ?? null)
-        setMonthlyGoal(data.monthly_goal != null ? String(data.monthly_goal) : '')
-        setVille((data as any).ville ?? '')
-      }
+      const { data, error } = await supabase.from('profiles').select('username, avatar_url, monthly_goal, ville').eq('id', user.id).single()
+      if (error || !data) { setLoadError(true); return }
+      setUsername(data.username)
+      setNewUsername(data.username)
+      setAvatarUrl(data.avatar_url ?? null)
+      setMonthlyGoal(data.monthly_goal != null ? String(data.monthly_goal) : '')
+      setVille((data as any).ville ?? '')
+    } catch {
+      setLoadError(true)
+    } finally {
       setLoading(false)
     }
-    load()
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
 
   async function pickAvatar() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -303,10 +314,22 @@ export default function Settings() {
     else await supabase.auth.signOut()
   }
 
-  if (loading) {
+  if (loading || loadError) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} />
+        <ScreenHeader fallback="/(tabs)/profile" title={t("Paramètres")} />
+        {loading ? (
+          <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} />
+        ) : (
+          <View style={styles.errorBox}>
+            <Ionicons name="cloud-offline-outline" size={40} color={C.faint} />
+            <Text style={styles.errorTitle}>{t("Impossible de charger tes paramètres")}</Text>
+            <Text style={styles.hint}>{t("Vérifie ta connexion puis réessaie.")}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={load}>
+              <Text style={styles.retryText}>{t("Réessayer")}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     )
   }
@@ -330,7 +353,7 @@ export default function Settings() {
                 </View>
               )}
               <View style={styles.avatarEditBadge}>
-                <Text style={styles.avatarEditText}>{uploadingAvatar ? '...' : '✏️'}</Text>
+                {uploadingAvatar ? <Text style={styles.avatarEditText}>...</Text> : <Ionicons name="camera" size={12} color={C.primaryText} />}
               </View>
             </TouchableOpacity>
             <View style={styles.avatarInfo}>
@@ -356,7 +379,7 @@ export default function Settings() {
               onChangeText={(v) => { setNewUsername(v); setUsernameMsg('') }}
               autoCapitalize="none"
               placeholder={t("Pseudo")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
             />
             <TouchableOpacity
               style={[styles.saveChip, (newUsername.trim() === username || usernameCheck.status === 'taken') && styles.saveChipDisabled]}
@@ -389,7 +412,7 @@ export default function Settings() {
               value={newPassword}
               onChangeText={(v) => { setNewPassword(v); setPasswordMsg('') }}
               placeholder={t("Nouveau mot de passe ({n} car. min.)", { n: MIN_PASSWORD_LENGTH })}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="new-password"
@@ -400,7 +423,7 @@ export default function Settings() {
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel={showPassword ? t("Masquer le mot de passe") : t("Afficher le mot de passe")}
             >
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#B8A9A0" />
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={C.faint} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveChip} onPress={handleSavePassword} disabled={savingPassword}>
               <Text style={styles.saveChipText}>{savingPassword ? '...' : 'OK'}</Text>
@@ -426,6 +449,12 @@ export default function Settings() {
 
           <View style={styles.rowDivider} />
 
+          <Text style={styles.fieldLabel}>{t("Apparence")}</Text>
+          <Text style={styles.hint}>{t("« Système » suit le mode clair/sombre de ton téléphone")}</Text>
+          <ThemeSwitcher />
+
+          <View style={styles.rowDivider} />
+
           <Text style={styles.fieldLabel}>{t("Objectif mensuel")}</Text>
           <Text style={styles.hint}>{t("Nombre de dates que tu veux faire par mois")}</Text>
           <View style={styles.fieldRow}>
@@ -434,7 +463,7 @@ export default function Settings() {
               value={monthlyGoal}
               onChangeText={(v) => { setMonthlyGoal(v.replace(/[^0-9]/g, '')); setGoalMsg('') }}
               placeholder={t("Ex : 2")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               keyboardType="number-pad"
               maxLength={2}
             />
@@ -450,7 +479,7 @@ export default function Settings() {
 
           <View style={styles.rowDivider} />
 
-          <Text style={styles.fieldLabel}>{t("📍 Ma ville")}</Text>
+          <Text style={styles.fieldLabel}>{t("Ma ville")}</Text>
           <Text style={styles.hint}>{t("Utilisée pour te proposer des idées de dates près de chez toi")}</Text>
           <View style={styles.fieldRow}>
             <TextInput
@@ -458,7 +487,7 @@ export default function Settings() {
               value={ville}
               onChangeText={(v) => { setVille(v); setVilleMsg('') }}
               placeholder={t("Ex : Lyon")}
-              placeholderTextColor="#B8A9A0"
+              placeholderTextColor={C.faint}
               returnKeyType="done"
               onSubmitEditing={() => saveVille(ville)}
             />
@@ -467,7 +496,7 @@ export default function Settings() {
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={useCurrentLocation} disabled={locatingVille} style={styles.locateLink}>
-            <Ionicons name="navigate-outline" size={13} color="#D4517E" />
+            <Ionicons name="navigate-outline" size={13} color={C.primary} />
             <Text style={styles.locateLinkText}>
               {locatingVille ? t("Localisation...") : t("Utiliser ma position actuelle")}
             </Text>
@@ -487,7 +516,7 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Exporter mes dates (CSV)")}</Text>
               <Text style={styles.hint}>{t("Tableau de tes dates notés, pour un tableur")}</Text>
             </View>
-            {exportingCSV ? <ActivityIndicator color="#D4517E" /> : <Ionicons name="download-outline" size={20} color="#D4517E" />}
+            {exportingCSV ? <ActivityIndicator color={C.primary} /> : <Ionicons name="download-outline" size={20} color={C.primary} />}
           </TouchableOpacity>
           <View style={styles.rowDivider} />
           <TouchableOpacity style={styles.plainRow} onPress={exportFullData} disabled={exportingJSON}>
@@ -495,7 +524,7 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Export complet de mes données")}</Text>
               <Text style={styles.hint}>{t("Toutes tes données personnelles au format JSON (RGPD)")}</Text>
             </View>
-            {exportingJSON ? <ActivityIndicator color="#D4517E" /> : <Ionicons name="download-outline" size={20} color="#D4517E" />}
+            {exportingJSON ? <ActivityIndicator color={C.primary} /> : <Ionicons name="download-outline" size={20} color={C.primary} />}
           </TouchableOpacity>
           <View style={styles.rowDivider} />
           <TouchableOpacity style={styles.plainRow} onPress={() => router.push('/privacy')}>
@@ -503,7 +532,7 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Politique de confidentialité")}</Text>
               <Text style={styles.hint}>{t("Quelles données sont collectées et pourquoi")}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#B8A9A0" />
+            <Ionicons name="chevron-forward" size={20} color={C.faint} />
           </TouchableOpacity>
           <View style={styles.rowDivider} />
           <TouchableOpacity style={styles.plainRow} onPress={() => router.push('/terms')}>
@@ -511,7 +540,7 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Conditions d'utilisation")}</Text>
               <Text style={styles.hint}>{t("CGU du service")}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#B8A9A0" />
+            <Ionicons name="chevron-forward" size={20} color={C.faint} />
           </TouchableOpacity>
         </View>
 
@@ -523,7 +552,7 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Revoir la présentation")}</Text>
               <Text style={styles.hint}>{t("Les principales fonctionnalités de Dateo en 5 écrans")}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#B8A9A0" />
+            <Ionicons name="chevron-forward" size={20} color={C.faint} />
           </TouchableOpacity>
           <View style={styles.rowDivider} />
           <TouchableOpacity
@@ -534,12 +563,12 @@ export default function Settings() {
               <Text style={styles.fieldLabel}>{t("Se déconnecter")}</Text>
               <Text style={styles.hint}>{email}</Text>
             </View>
-            <Ionicons name="log-out-outline" size={20} color="#D4517E" />
+            <Ionicons name="log-out-outline" size={20} color={C.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Zone de danger */}
-        <Text style={styles.groupLabel}>{t("⚠️ Zone de danger")}</Text>
+        <Text style={[styles.groupLabel, { color: C.danger }]}>{t("Zone de danger")}</Text>
         <View style={[styles.section, styles.dangerZone]}>
           {deleteMsg ? <Text style={styles.msgError}>{deleteMsg}</Text> : null}
           {!confirmDelete ? (
@@ -572,47 +601,51 @@ export default function Settings() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
-  groupLabel: { fontSize: 12, fontWeight: '700', color: '#B8A9A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4, marginLeft: 4 },
-  section: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#F0D9D9' },
-  dangerZone: { borderColor: '#F0B8A8', backgroundColor: '#FFF9F7' },
-  rowDivider: { height: 1, backgroundColor: '#F0D9D9', marginVertical: 16 },
+  groupLabel: { fontSize: 12, fontWeight: '700', color: C.faint, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 4, marginLeft: 4 },
+  section: { backgroundColor: C.card, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: C.border },
+  dangerZone: { borderColor: C.dangerBorder, backgroundColor: C.bgAlt },
+  rowDivider: { height: 1, backgroundColor: C.border, marginVertical: 16 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 8 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 26, fontWeight: '700', color: '#D4517E' },
-  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, width: 22, height: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F0D9D9' },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.border },
+  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 26, fontWeight: '700', color: C.primaryText },
+  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: C.card, borderRadius: 10, width: 22, height: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
   avatarEditText: { fontSize: 12 },
   avatarInfo: { flex: 1 },
-  avatarName: { fontSize: 16, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
-  avatarChangeBtn: { fontSize: 13, color: '#D4517E', fontWeight: '600' },
-  fieldLabel: { fontSize: 14, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
-  hint: { fontSize: 12, color: '#888', marginBottom: 10 },
+  avatarName: { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 4 },
+  avatarChangeBtn: { fontSize: 13, color: C.primaryText, fontWeight: '600' },
+  fieldLabel: { fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 4 },
+  hint: { fontSize: 12, color: C.muted, marginBottom: 10 },
   fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  input: { borderRadius: 10, borderWidth: 1, borderColor: '#F0D9D9', padding: 12, fontSize: 14, backgroundColor: '#FFF8F5' },
+  input: { borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 12, fontSize: 14, backgroundColor: C.bg },
   inputInline: { flex: 1 },
-  saveChip: { backgroundColor: '#D4517E', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
-  saveChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  saveChip: { backgroundColor: C.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  saveChipText: { color: C.onPrimary, fontWeight: '700', fontSize: 13 },
   saveChipDisabled: { opacity: 0.4 },
-  msgMuted: { color: '#888' },
+  msgMuted: { color: C.muted },
   locateLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  locateLinkText: { color: '#D4517E', fontWeight: '600', fontSize: 12 },
+  locateLinkText: { color: C.primaryText, fontWeight: '600', fontSize: 12 },
   plainRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   msg: { fontSize: 13, marginTop: 8, lineHeight: 18 },
-  msgSuccess: { color: '#3B6D11' },
-  msgError: { color: '#D85A30' },
-  dangerBtn: { borderRadius: 10, borderWidth: 1, borderColor: '#D85A30', padding: 13, alignItems: 'center' },
-  dangerBtnText: { color: '#D85A30', fontWeight: '600', fontSize: 14 },
+  msgSuccess: { color: C.success },
+  msgError: { color: C.danger },
+  dangerBtn: { borderRadius: 10, borderWidth: 1, borderColor: C.danger, padding: 13, alignItems: 'center' },
+  dangerBtnText: { color: C.danger, fontWeight: '600', fontSize: 14 },
   confirmBox: { gap: 10 },
-  confirmWarn: { fontSize: 13, color: '#D85A30', lineHeight: 18 },
-  confirmYes: { backgroundColor: '#D85A30', borderRadius: 10, padding: 13, alignItems: 'center' },
-  confirmYesText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  confirmNo: { borderRadius: 10, borderWidth: 1, borderColor: '#D0C5C0', padding: 12, alignItems: 'center' },
-  confirmNoText: { color: '#888', fontSize: 14 },
-})
+  confirmWarn: { fontSize: 13, color: C.danger, lineHeight: 18 },
+  confirmYes: { backgroundColor: C.danger, borderRadius: 10, padding: 13, alignItems: 'center' },
+  confirmYesText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+  confirmNo: { borderRadius: 10, borderWidth: 1, borderColor: C.borderStrong, padding: 12, alignItems: 'center' },
+  errorBox: { alignItems: 'center', marginTop: 60, paddingHorizontal: 32, gap: 6 },
+  errorTitle: { fontSize: 16, fontWeight: '700', color: C.text, textAlign: 'center', marginTop: 8 },
+  retryBtn: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 8 },
+  retryText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  confirmNoText: { color: C.muted, fontSize: 14 },
+}))

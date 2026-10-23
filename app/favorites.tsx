@@ -8,6 +8,7 @@ import { formaterDate, formatNote } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type FavItem = {
   id: string
@@ -65,7 +66,7 @@ export default function Favorites() {
       <ScreenHeader fallback="/(tabs)/profile" title={t("Favoris")} />
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : (
         <FlatList
           contentContainerStyle={[styles.content, webContentStyle]}
@@ -106,7 +107,7 @@ export default function Favorites() {
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityLabel={t("Retirer des favoris")}
                   >
-                    <Ionicons name="bookmark" size={20} color="#D4517E" />
+                    <Ionicons name="bookmark" size={20} color={C.primary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -119,24 +120,24 @@ export default function Favorites() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
-  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  emptyCta: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
   cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  lieu: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
-  lieuSub: { fontSize: 12, color: '#888', marginTop: 2 },
-  note: { fontSize: 15, fontWeight: '700', color: '#D4517E' },
-  meta: { fontSize: 12, color: '#888' },
+  lieu: { fontSize: 15, fontWeight: '600', color: C.text },
+  lieuSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+  note: { fontSize: 15, fontWeight: '700', color: C.primaryText },
+  meta: { fontSize: 12, color: C.muted },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 10 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
-  emptySub: { fontSize: 13, color: '#888', textAlign: 'center', paddingHorizontal: 40, lineHeight: 18 },
-})
+  emptyText: { fontSize: 16, fontWeight: '600', color: C.text, marginBottom: 6 },
+  emptySub: { fontSize: 13, color: C.muted, textAlign: 'center', paddingHorizontal: 40, lineHeight: 18 },
+}))

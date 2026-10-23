@@ -10,6 +10,7 @@ import { AuthScreen, authStyles } from '../../lib/AuthScreen'
 import { useUsernameCheck } from '../../lib/useUsernameCheck'
 import { MIN_AGE, MIN_PASSWORD_LENGTH, computeAge, emailValide, traduireErreurAuth } from '../../lib/authErrors'
 import { t } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 type Errors = Partial<Record<'email' | 'password' | 'username' | 'birthdate' | 'terms', string>>
 
@@ -119,7 +120,7 @@ export default function Signup() {
     return (
       <AuthScreen title={t("Vérifie ta boîte mail")} subtitle={t("On a envoyé un lien de confirmation à {email}. Clique dessus puis reviens te connecter.", { email: confirmationSentTo })}>
         <View style={styles.mailIconWrap}>
-          <Ionicons name="mail-unread-outline" size={56} color="#D4517E" />
+          <Ionicons name="mail-unread-outline" size={56} color={C.primary} />
         </View>
         {resendMsg ? (
           <Text style={resendMsg === t("Email renvoyé !") ? authStyles.formSuccess : authStyles.formError}>{resendMsg}</Text>
@@ -188,9 +189,9 @@ export default function Signup() {
         error={usernameInlineError}
         hint={usernameHint}
         right={usernameCheck.status === 'checking'
-          ? <ActivityIndicator size="small" color="#D4517E" />
+          ? <ActivityIndicator size="small" color={C.primary} />
           : usernameCheck.status === 'available'
-            ? <Ionicons name="checkmark-circle" size={20} color="#3B6D11" />
+            ? <Ionicons name="checkmark-circle" size={20} color={C.success} />
             : null}
       />
 
@@ -212,7 +213,7 @@ export default function Signup() {
         <Ionicons
           name={termsAccepted ? 'checkbox' : 'square-outline'}
           size={22}
-          color={errors.terms ? '#D85A30' : termsAccepted ? '#D4517E' : '#B8A9A0'}
+          color={errors.terms ? C.danger : termsAccepted ? C.primary : C.faint}
         />
         <Text style={styles.termsText}>
           {t("J'accepte les")}{' '}
@@ -226,7 +227,7 @@ export default function Signup() {
       {formError ? <Text style={authStyles.formError}>{formError}</Text> : null}
 
       <TouchableOpacity style={[authStyles.button, saving && authStyles.buttonDisabled]} onPress={handleSignup} disabled={saving}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Créer mon compte")}</Text>}
+        {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={authStyles.buttonText}>{t("Créer mon compte")}</Text>}
       </TouchableOpacity>
 
       <View style={authStyles.secondaryLinkRow}>
@@ -239,16 +240,16 @@ export default function Signup() {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   birthWrap: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
-  hint: { color: '#888', fontSize: 12, marginTop: 4 },
-  fieldError: { color: '#D85A30', fontSize: 12, marginTop: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: C.text, marginBottom: 6 },
+  hint: { color: C.muted, fontSize: 12, marginTop: 4 },
+  fieldError: { color: C.danger, fontSize: 12, marginTop: 4 },
   termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
-  termsText: { flex: 1, fontSize: 13, color: '#5C4A45', lineHeight: 20 },
-  termsLink: { color: '#D4517E', fontWeight: '600', textDecorationLine: 'underline' },
+  termsText: { flex: 1, fontSize: 13, color: C.text, lineHeight: 20 },
+  termsLink: { color: C.primaryText, fontWeight: '600', textDecorationLine: 'underline' },
   mailIconWrap: { alignItems: 'center', marginBottom: 20 },
   textBtn: { alignItems: 'center', padding: 12, marginTop: 4 },
-  textBtnLabel: { color: '#D4517E', fontWeight: '600', fontSize: 14 },
-  textBtnMuted: { color: '#888', fontSize: 13 },
-})
+  textBtnLabel: { color: C.primaryText, fontWeight: '600', fontSize: 14 },
+  textBtnMuted: { color: C.muted, fontSize: 13 },
+}))

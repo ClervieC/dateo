@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter, Href } from 'expo-router'
 import { t } from './i18n'
+import { C, themedStyles } from './theme'
 
 // router.back() ne fait rien quand l'écran a été ouvert directement (notification,
 // lien, page web rechargée) : on retombe alors sur un écran de repli.
@@ -34,7 +35,7 @@ export function ScreenHeader({ title, right, fallback = '/', bordered = true }: 
         accessibilityRole="button"
         accessibilityLabel={t("Retour")}
       >
-        <Ionicons name="chevron-back" size={22} color="#D4517E" />
+        <Ionicons name="chevron-back" size={22} color={C.primary} />
         <Text style={styles.back}>{t("Retour")}</Text>
       </TouchableOpacity>
       {title ? <Text style={styles.title} numberOfLines={1} accessibilityRole="header">{title}</Text> : <View style={{ flex: 1 }} />}
@@ -43,11 +44,11 @@ export function ScreenHeader({ title, right, fallback = '/', bordered = true }: 
   )
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, minHeight: 52, backgroundColor: '#FFF8F5' },
-  bordered: { borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, minHeight: 52, backgroundColor: C.bg },
+  bordered: { borderBottomWidth: 1, borderBottomColor: C.border },
   side: { width: 92, flexDirection: 'row', alignItems: 'center' },
   sideRight: { justifyContent: 'flex-end', gap: 4 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  title: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#5C4A45' },
-})
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  title: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: C.text },
+}))

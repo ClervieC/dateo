@@ -9,6 +9,7 @@ import { webContentStyle } from '../lib/webStyles'
 import { showAlert, confirmAction } from '../lib/alert'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type Person = { id: string; username: string; avatar_url: string | null }
 // rowId = id de la ligne « friends », userId = l'autre personne
@@ -160,7 +161,7 @@ export default function Friends() {
           <Avatar person={person} />
           <Text style={styles.username} numberOfLines={1}>@{person.username}</Text>
         </TouchableOpacity>
-        {busyId === person.id ? <ActivityIndicator color="#D4517E" /> : children}
+        {busyId === person.id ? <ActivityIndicator color={C.primary} /> : children}
       </View>
     )
   }
@@ -191,20 +192,20 @@ export default function Friends() {
       <ScreenHeader title={t("Amis")} fallback="/(tabs)/profile" />
       <View style={[styles.container, webContentStyle]}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={16} color="#B8A9A0" />
+          <Ionicons name="search" size={16} color={C.faint} />
           <TextInput
             style={styles.searchInput}
             placeholder={t("Chercher un pseudo…")}
-            placeholderTextColor="#B8A9A0"
+            placeholderTextColor={C.faint}
             value={query}
             onChangeText={handleSearch}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
           />
-          {searching ? <ActivityIndicator size="small" color="#D4517E" /> : query ? (
+          {searching ? <ActivityIndicator size="small" color={C.primary} /> : query ? (
             <TouchableOpacity onPress={() => handleSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Effacer")}>
-              <Ionicons name="close-circle" size={18} color="#B8A9A0" />
+              <Ionicons name="close-circle" size={18} color={C.faint} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -282,14 +283,14 @@ export default function Friends() {
                 <Text style={styles.emptyTitle}>{t("Pas encore d'amis sur Dateo")}</Text>
                 <Text style={styles.empty}>{t("Cherche leur pseudo ci-dessus, ou invite-les à te rejoindre.")}</Text>
                 <TouchableOpacity style={styles.inviteButton} onPress={inviteFriends}>
-                  <Ionicons name="share-social-outline" size={16} color="#fff" />
+                  <Ionicons name="share-social-outline" size={16} color={C.onPrimary} />
                   <Text style={styles.inviteText}>{t("Inviter des amis")}</Text>
                 </TouchableOpacity>
               </View>
             }
             ListFooterComponent={friends.length > 0 ? (
               <TouchableOpacity style={styles.inviteFooter} onPress={inviteFriends}>
-                <Ionicons name="share-social-outline" size={16} color="#D4517E" />
+                <Ionicons name="share-social-outline" size={16} color={C.primary} />
                 <Text style={styles.link}>{t("Inviter d'autres amis")}</Text>
               </TouchableOpacity>
             ) : null}
@@ -300,34 +301,34 @@ export default function Friends() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#5C4A45', minWidth: 0 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: C.border },
+  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: C.text, minWidth: 0 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#B8A9A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0D9D9', minHeight: 56 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: C.faint, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, backgroundColor: C.card, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: C.border, minHeight: 56 },
   personTap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
-  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F0D9D9' },
-  avatarPlaceholder: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  avatarInitial: { fontSize: 14, fontWeight: '700', color: '#D4517E' },
-  username: { fontSize: 15, color: '#5C4A45', fontWeight: '600', flexShrink: 1 },
+  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.border },
+  avatarPlaceholder: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 14, fontWeight: '700', color: C.primaryText },
+  username: { fontSize: 15, color: C.text, fontWeight: '600', flexShrink: 1 },
   actionButtons: { flexDirection: 'row', gap: 8 },
-  addButton: { backgroundColor: '#D4517E', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
-  addText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  acceptButton: { backgroundColor: '#3B6D11', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
-  acceptText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  declineButton: { backgroundColor: '#F0D9D9', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
-  declineText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
-  statusText: { color: '#888', fontSize: 13, fontWeight: '500' },
-  removeText: { color: '#B8A9A0', fontSize: 13, fontWeight: '600' },
+  addButton: { backgroundColor: C.primary, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
+  addText: { color: C.onPrimary, fontWeight: '700', fontSize: 13 },
+  acceptButton: { backgroundColor: C.success, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  acceptText: { color: C.onPrimary, fontWeight: '700', fontSize: 13 },
+  declineButton: { backgroundColor: C.border, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  declineText: { color: C.primaryText, fontWeight: '600', fontSize: 13 },
+  statusText: { color: C.muted, fontSize: 13, fontWeight: '500' },
+  removeText: { color: C.faint, fontSize: 13, fontWeight: '600' },
   emptyBox: { alignItems: 'center', marginTop: 24, paddingHorizontal: 16 },
   emptyIcon: { fontSize: 36, marginBottom: 8 },
-  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
-  empty: { color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 19, marginBottom: 12 },
-  link: { color: '#D4517E', fontWeight: '600', fontSize: 14 },
-  inviteButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
-  inviteText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 4 },
+  empty: { color: C.muted, textAlign: 'center', fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  link: { color: C.primaryText, fontWeight: '600', fontSize: 14 },
+  inviteButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
+  inviteText: { color: C.onPrimary, fontWeight: '700', fontSize: 15 },
   inviteFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16 },
-})
+}))

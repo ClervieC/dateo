@@ -8,6 +8,7 @@ import { formaterDate, formatNote } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 type Result = {
   type: 'date' | 'user'
@@ -78,17 +79,17 @@ export default function Search() {
       <ScreenHeader fallback="/(tabs)/profile" title={t("Recherche")} />
 
       <View style={styles.searchBox}>
-        <Ionicons name="search" size={18} color="#B8A9A0" />
+        <Ionicons name="search" size={18} color={C.faint} />
         <TextInput
           style={styles.searchInput}
           value={query}
           onChangeText={handleChange}
           placeholder={t("Dates, lieux, utilisateurs...")}
-          placeholderTextColor="#B8A9A0"
+          placeholderTextColor={C.faint}
           autoFocus
           clearButtonMode="while-editing"
         />
-        {loading && <ActivityIndicator size="small" color="#D4517E" />}
+        {loading && <ActivityIndicator size="small" color={C.primary} />}
       </View>
 
       <FlatList
@@ -105,13 +106,13 @@ export default function Search() {
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.result} onPress={() => handlePress(item)} activeOpacity={0.8}>
             <View style={styles.resultIcon}>
-              <Ionicons name={item.type === 'date' ? 'calendar-outline' : 'person-outline'} size={18} color="#D4517E" />
+              <Ionicons name={item.type === 'date' ? 'calendar-outline' : 'person-outline'} size={18} color={C.primary} />
             </View>
             <View style={styles.resultBody}>
               <Text style={styles.resultTitle}>{item.title}</Text>
               <Text style={styles.resultSub}>{item.subtitle}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#D0C5C0" />
+            <Ionicons name="chevron-forward" size={16} color={C.borderStrong} />
           </TouchableOpacity>
         )}
       />
@@ -119,20 +120,20 @@ export default function Search() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#F0D9D9' },
-  searchInput: { flex: 1, fontSize: 15, color: '#5C4A45', padding: 0 },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border },
+  searchInput: { flex: 1, fontSize: 15, color: C.text, padding: 0 },
   content: { paddingHorizontal: 16, paddingBottom: 60 },
-  result: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#F0D9D9' },
-  resultIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  result: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  resultIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   resultBody: { flex: 1 },
-  resultTitle: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
-  resultSub: { fontSize: 12, color: '#888', marginTop: 2 },
-  emptyText: { textAlign: 'center', color: '#888', marginTop: 32, fontSize: 14 },
-  hintText: { textAlign: 'center', color: '#B8A9A0', marginTop: 40, fontSize: 14 },
-})
+  resultTitle: { fontSize: 15, fontWeight: '600', color: C.text },
+  resultSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+  emptyText: { textAlign: 'center', color: C.muted, marginTop: 32, fontSize: 14 },
+  hintText: { textAlign: 'center', color: C.faint, marginTop: 40, fontSize: 14 },
+}))

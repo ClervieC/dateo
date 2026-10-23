@@ -11,6 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { t, tKey } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 const STEPS = [
   {
@@ -50,6 +51,9 @@ export default function Onboarding() {
   const listRef = useRef<FlatList>(null);
   const router = useRouter();
   const { width } = useWindowDimensions();
+  // Hauteur réelle de la zone des slides : sur le web, un élément de FlatList
+  // horizontale ne s'étire pas en hauteur, le texte restait collé en haut.
+  const [listHeight, setListHeight] = useState(0);
 
   function goNext() {
     if (index < STEPS.length - 1) {
@@ -88,6 +92,8 @@ export default function Onboarding() {
       </View>
       <FlatList
         ref={listRef}
+        style={{ flex: 1 }}
+        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
         data={STEPS}
         horizontal
         pagingEnabled
@@ -103,7 +109,7 @@ export default function Onboarding() {
           setIndex(newIndex);
         }}
         renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
+          <View style={[styles.slide, { width }, listHeight > 0 && { height: listHeight }]}>
             <View style={styles.slideContent}>
               <Text style={styles.emoji}>{item.emoji}</Text>
               <Text style={styles.title}>{t(item.title)}</Text>
@@ -142,8 +148,8 @@ export default function Onboarding() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFF8F5" },
+const styles = themedStyles(() => ({
+  container: { flex: 1, backgroundColor: C.bg },
   topBar: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -162,14 +168,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#D4517E",
+    color: C.primaryText,
     textAlign: "center",
     marginBottom: 16,
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 16,
-    color: "#888",
+    color: C.muted,
     textAlign: "center",
     lineHeight: 24,
   },
@@ -179,8 +185,8 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#F0D9D9" },
-  dotActive: { backgroundColor: "#D4517E", width: 24 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.border },
+  dotActive: { backgroundColor: C.primary, width: 24 },
   actions: {
     paddingHorizontal: 24,
     paddingBottom: 24,
@@ -190,12 +196,12 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   primaryBtn: {
-    backgroundColor: "#D4517E",
+    backgroundColor: C.primary,
     borderRadius: 16,
     padding: 18,
     alignItems: "center",
   },
-  primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 17 },
+  primaryBtnText: { color: C.onPrimary, fontWeight: "700", fontSize: 17 },
   secondaryRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -203,6 +209,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   skipBtn: { alignItems: "center", padding: 10 },
-  skipText: { color: "#B8A9A0", fontSize: 15 },
-  secondaryCta: { color: "#D4517E", fontSize: 15, fontWeight: "600" },
-});
+  skipText: { color: C.faint, fontSize: 15 },
+  secondaryCta: { color: C.primaryText, fontSize: 15, fontWeight: "600" },
+}));

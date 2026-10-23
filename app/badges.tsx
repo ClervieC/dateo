@@ -9,6 +9,7 @@ import { computeBadges } from '../lib/badges'
 import { formaterDate } from '../lib/dateUtils'
 import { ScreenHeader } from '../lib/ScreenHeader'
 import { t } from '../lib/i18n'
+import { C, themedStyles } from '../lib/theme'
 
 export default function Badges() {
   const [badges, setBadges] = useState<ReturnType<typeof computeBadges>>([])
@@ -65,7 +66,7 @@ export default function Badges() {
       <ScreenHeader fallback="/(tabs)/profile" title="Badges" />
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : (
         <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
           <Text style={styles.progress}>{t("{fait} / {total} débloqués", { fait: unlocked.length, total: badges.length })}</Text>
@@ -116,24 +117,24 @@ export default function Badges() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: C.text },
   content: { padding: 20, paddingBottom: 60 },
-  progress: { fontSize: 15, color: '#D4517E', fontWeight: '700', textAlign: 'center', marginBottom: 20 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#5C4A45', marginBottom: 10, marginTop: 4 },
+  progress: { fontSize: 15, color: C.primaryText, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 10, marginTop: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
-  badge: { width: '47%', backgroundColor: '#fff', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#F0D9D9', alignItems: 'center' },
-  badgeLocked: { opacity: 0.4, backgroundColor: '#F7F2F0' },
+  badge: { width: '47%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  badgeLocked: { opacity: 0.4, backgroundColor: C.bgAlt },
   badgeEmoji: { fontSize: 32, marginBottom: 6 },
-  badgeLabel: { fontSize: 13, fontWeight: '700', color: '#5C4A45', textAlign: 'center' },
-  badgeLabelLocked: { color: '#aaa' },
-  badgeDesc: { fontSize: 11, color: '#888', textAlign: 'center', marginTop: 4, lineHeight: 15 },
-  badgeUnlockedAt: { fontSize: 10, color: '#D4517E', fontWeight: '600', marginTop: 6 },
-  badgeProgressTrack: { width: '100%', height: 4, borderRadius: 2, backgroundColor: '#E8DCD8', marginTop: 8, overflow: 'hidden' },
-  badgeProgressFill: { height: 4, borderRadius: 2, backgroundColor: '#D4517E' },
-  badgeProgressText: { fontSize: 10, color: '#B8A9A0', marginTop: 3, fontWeight: '600' },
-})
+  badgeLabel: { fontSize: 13, fontWeight: '700', color: C.text, textAlign: 'center' },
+  badgeLabelLocked: { color: C.faint },
+  badgeDesc: { fontSize: 11, color: C.muted, textAlign: 'center', marginTop: 4, lineHeight: 15 },
+  badgeUnlockedAt: { fontSize: 10, color: C.primaryText, fontWeight: '600', marginTop: 6 },
+  badgeProgressTrack: { width: '100%', height: 4, borderRadius: 2, backgroundColor: C.borderStrong, marginTop: 8, overflow: 'hidden' },
+  badgeProgressFill: { height: 4, borderRadius: 2, backgroundColor: C.primary },
+  badgeProgressText: { fontSize: 10, color: C.faint, marginTop: 3, fontWeight: '600' },
+}))

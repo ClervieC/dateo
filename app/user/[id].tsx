@@ -10,6 +10,7 @@ import { confirmAction, showAlert } from '../../lib/alert'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { t, tn, tKey } from '../../lib/i18n'
+import { C, themedStyles } from '../../lib/theme'
 
 // Enregistrées en français en base (pour la modération), affichées traduites
 const REPORT_REASONS = [
@@ -199,11 +200,11 @@ export default function UserProfile() {
         right={
           <>
             <TouchableOpacity onPress={() => Share.share({ message: t("Regarde le profil de @{username} sur Dateo !", { username }) })} style={styles.shareBtn} accessibilityLabel={t("Partager le profil")}>
-              <Ionicons name="share-outline" size={22} color="#D4517E" />
+              <Ionicons name="share-outline" size={22} color={C.primary} />
             </TouchableOpacity>
             {myId && myId !== id ? (
               <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.shareBtn} accessibilityLabel={t("Plus d'options")}>
-                <Ionicons name="ellipsis-horizontal" size={22} color="#D4517E" />
+                <Ionicons name="ellipsis-horizontal" size={22} color={C.primary} />
               </TouchableOpacity>
             ) : null}
           </>
@@ -214,13 +215,13 @@ export default function UserProfile() {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuCard}>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setReportOpen(true) }}>
-              <Ionicons name="flag-outline" size={18} color="#5C4A45" />
+              <Ionicons name="flag-outline" size={18} color={C.text} />
               <Text style={styles.menuItemText}>{t("Signaler ce profil")}</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={confirmToggleBlock} disabled={blockSaving}>
-              <Ionicons name={isBlocked ? 'lock-open-outline' : 'ban-outline'} size={18} color="#D85A30" />
-              <Text style={[styles.menuItemText, { color: '#D85A30' }]}>
+              <Ionicons name={isBlocked ? 'lock-open-outline' : 'ban-outline'} size={18} color={C.danger} />
+              <Text style={[styles.menuItemText, { color: C.danger }]}>
                 {blockSaving ? '...' : isBlocked ? t("Débloquer") : t("Bloquer cet utilisateur")}
               </Text>
             </TouchableOpacity>
@@ -248,7 +249,7 @@ export default function UserProfile() {
       </Modal>
 
       {loading ? (
-        <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
+        <ActivityIndicator color={C.primary} style={{ marginTop: 60 }} size="large" />
       ) : profileNotFound ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>{t("Profil introuvable")}</Text>
@@ -279,14 +280,14 @@ export default function UserProfile() {
                     onPress={handleFriendAction}
                     disabled={friendSaving}
                   >
-                    {friendSaving ? <ActivityIndicator size="small" color={friendship ? '#D4517E' : '#fff'} /> : (
+                    {friendSaving ? <ActivityIndicator size="small" color={friendship ? C.primary : C.onPrimary} /> : (
                       <Text style={[styles.friendBtnText, friendship && styles.friendBtnTextPending]}>
                         {!friendship ? t("+ Ajouter en ami") : friendship.sentByMe ? t("Demande envoyée · Annuler") : t("Accepter sa demande")}
                       </Text>
                     )}
                   </TouchableOpacity>
                 )}
-                {friendship?.status === 'accepted' && <Text style={styles.friendTag}>{t("✓ Vous êtes amis")}</Text>}
+                {friendship?.status === 'accepted' && <Text style={styles.friendTag}><Ionicons name="checkmark-circle" size={13} color={C.success} /> {t("Vous êtes amis")}</Text>}
                 </View>
               </View>
 
@@ -352,7 +353,7 @@ export default function UserProfile() {
             >
               {item.conseil_vivement && (
                 <View style={styles.conseilBanner}>
-                  <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
+                  <Text style={styles.conseilBannerText}><Ionicons name="heart" size={11} color={C.primaryText} /> {t("Conseillé vivement")}</Text>
                 </View>
               )}
               <View style={styles.cardHeader}>
@@ -360,7 +361,7 @@ export default function UserProfile() {
                   {item.intitule ? (
                     <>
                       <Text style={styles.lieu}>{item.intitule}</Text>
-                      <Text style={styles.lieuAddress}>📍 {item.lieu}</Text>
+                      <Text style={styles.lieuAddress}><Ionicons name="location-outline" size={12} color={C.muted} /> {item.lieu}</Text>
                     </>
                   ) : (
                     <Text style={styles.lieu}>{item.lieu}</Text>
@@ -400,51 +401,51 @@ export default function UserProfile() {
   )
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  friendBtn: { backgroundColor: '#D4517E', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 18, marginTop: 10, minHeight: 36, justifyContent: 'center' },
-  friendBtnPending: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#D4517E' },
-  friendBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  friendBtnTextPending: { color: '#D4517E' },
-  friendTag: { marginTop: 8, fontSize: 13, color: '#3B6D11', fontWeight: '600' },
+const styles = themedStyles(() => ({
+  safeArea: { flex: 1, backgroundColor: C.bg },
+  friendBtn: { backgroundColor: C.primary, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 18, marginTop: 10, minHeight: 36, justifyContent: 'center' },
+  friendBtnPending: { backgroundColor: C.card, borderWidth: 1, borderColor: C.primary },
+  friendBtnText: { color: C.onPrimary, fontWeight: '700', fontSize: 14 },
+  friendBtnTextPending: { color: C.primaryText },
+  friendTag: { marginTop: 8, fontSize: 13, color: C.success, fontWeight: '600' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
   backBtn: { flexDirection: 'row', alignItems: 'center' },
   shareBtn: { padding: 4 },
-  back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
+  back: { color: C.primaryText, fontSize: 16, fontWeight: '500' },
   content: { padding: 20, paddingBottom: 60 },
   profileAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
-  profileAvatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#F0D9D9' },
-  profileAvatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
-  profileAvatarInitial: { fontSize: 24, fontWeight: '700', color: '#D4517E' },
-  username: { fontSize: 24, fontWeight: '700', color: '#5C4A45' },
+  profileAvatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.border },
+  profileAvatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  profileAvatarInitial: { fontSize: 24, fontWeight: '700', color: C.primaryText },
+  username: { fontSize: 24, fontWeight: '700', color: C.text },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  stat: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#F0D9D9' },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#D4517E' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#5C4A45', marginBottom: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  cardConseille: { borderColor: '#D4517E', borderWidth: 1.5 },
-  conseilBanner: { backgroundColor: '#FDE8F0', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 8, alignSelf: 'flex-start' },
-  conseilBannerText: { fontSize: 12, fontWeight: '700', color: '#D4517E' },
+  stat: { flex: 1, backgroundColor: C.card, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  statValue: { fontSize: 18, fontWeight: '700', color: C.primaryText },
+  statLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 12 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.border },
+  cardConseille: { borderColor: C.primary, borderWidth: 1.5 },
+  conseilBanner: { backgroundColor: C.primarySoft, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 8, alignSelf: 'flex-start' },
+  conseilBannerText: { fontSize: 12, fontWeight: '700', color: C.primaryText },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  lieu: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
-  lieuAddress: { fontSize: 12, color: '#888', marginTop: 1 },
-  note: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
-  date: { fontSize: 12, color: '#888' },
+  lieu: { fontSize: 16, fontWeight: '600', color: C.text },
+  lieuAddress: { fontSize: 12, color: C.muted, marginTop: 1 },
+  note: { fontSize: 16, fontWeight: '700', color: C.primaryText },
+  date: { fontSize: 12, color: C.muted },
   photoRow: { marginTop: 10, minWidth: 0 },
-  photo: { width: 120, height: 120, borderRadius: 10, marginRight: 8, backgroundColor: '#F0D9D9' },
-  comment: { fontSize: 14, color: '#5C4A45', marginTop: 8, lineHeight: 20 },
-  errorBanner: { backgroundColor: '#FDE8DE', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  errorBannerText: { color: '#993C1D', fontSize: 13, flex: 1 },
-  errorBannerRetry: { color: '#D4517E', fontWeight: '700', fontSize: 13 },
+  photo: { width: 120, height: 120, borderRadius: 10, marginRight: 8, backgroundColor: C.border },
+  comment: { fontSize: 14, color: C.text, marginTop: 8, lineHeight: 20 },
+  errorBanner: { backgroundColor: C.errorBg, borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  errorBannerText: { color: C.errorText, fontSize: 13, flex: 1 },
+  errorBannerRetry: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
   empty: { alignItems: 'center', marginTop: 40 },
-  emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
-  emptySubtext: { fontSize: 13, color: '#888', marginTop: 6, textAlign: 'center', lineHeight: 18 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: C.text },
+  emptySubtext: { fontSize: 13, color: C.muted, marginTop: 6, textAlign: 'center', lineHeight: 18 },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  menuCard: { backgroundColor: '#fff', borderRadius: 16, padding: 8, width: '100%', maxWidth: 340 },
+  menuCard: { backgroundColor: C.card, borderRadius: 16, padding: 8, width: '100%', maxWidth: 340 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12 },
-  menuItemText: { fontSize: 14, color: '#5C4A45', fontWeight: '500' },
-  menuDivider: { height: 1, backgroundColor: '#F0D9D9', marginVertical: 4 },
-  reportTitle: { fontSize: 14, fontWeight: '700', color: '#5C4A45', padding: 12, paddingBottom: 4 },
-  reportSentText: { fontSize: 14, color: '#3B6D11', fontWeight: '600', textAlign: 'center', padding: 20 },
-})
+  menuItemText: { fontSize: 14, color: C.text, fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: C.border, marginVertical: 4 },
+  reportTitle: { fontSize: 14, fontWeight: '700', color: C.text, padding: 12, paddingBottom: 4 },
+  reportSentText: { fontSize: 14, color: C.success, fontWeight: '600', textAlign: 'center', padding: 20 },
+}))

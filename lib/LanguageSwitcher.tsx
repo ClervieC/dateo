@@ -1,7 +1,9 @@
 import { View, Text, TouchableOpacity, StyleSheet, StyleProp, ViewStyle } from 'react-native'
 import { LANGS, setLang, useLang } from './i18n'
+import { C, themedStyles } from './theme'
 
-// Sélecteur FR / EN compact (écrans de connexion, paramètres)
+// Sélecteur FR / EN compact (écrans de connexion, paramètres). Pas de drapeaux :
+// Windows ne les affiche pas (« FR FR » / « GB EN »).
 export function LanguageSwitcher({ style }: { style?: StyleProp<ViewStyle> }) {
   const lang = useLang()
   return (
@@ -17,7 +19,6 @@ export function LanguageSwitcher({ style }: { style?: StyleProp<ViewStyle> }) {
             accessibilityState={{ checked: active }}
             accessibilityLabel={l.label}
           >
-            <Text style={styles.flag}>{l.flag}</Text>
             <Text style={[styles.label, active && styles.labelActive]}>{l.key.toUpperCase()}</Text>
           </TouchableOpacity>
         )
@@ -26,11 +27,11 @@ export function LanguageSwitcher({ style }: { style?: StyleProp<ViewStyle> }) {
   )
 }
 
-const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignSelf: 'center', backgroundColor: '#fff', borderRadius: 20, padding: 3, borderWidth: 1, borderColor: '#F0D9D9' },
+const styles = themedStyles(() => ({
+  wrap: { flexDirection: 'row', alignSelf: 'center', backgroundColor: C.card, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: C.border },
   option: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 16 },
-  optionActive: { backgroundColor: '#FDE8F0' },
+  optionActive: { backgroundColor: C.primarySoft },
   flag: { fontSize: 14 },
-  label: { fontSize: 12, fontWeight: '600', color: '#B8A9A0' },
-  labelActive: { color: '#D4517E' },
-})
+  label: { fontSize: 12, fontWeight: '600', color: C.faint },
+  labelActive: { color: C.primaryText },
+}))
