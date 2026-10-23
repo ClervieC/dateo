@@ -12,6 +12,8 @@ import { toastStore } from '../../lib/toastStore'
 import { feedBadgeStore } from '../../lib/feedBadgeStore'
 import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
 import { PhotoViewer } from '../../lib/PhotoViewer'
+import { useBottomTabs } from '../../lib/useBottomTabs'
+import { t } from '../../lib/i18n'
 
 const PAGE_SIZE = 20
 const FEED_CACHE_KEY = 'feedCache'
@@ -58,6 +60,8 @@ export default function Feed() {
   const fetchErrorRef = useRef(false)
   const toastAnim = useRef(new Animated.Value(0)).current
   const router = useRouter()
+  // Cloche dans l'en-tête sur téléphone ; sur ordinateur elle est dans la barre du haut
+  const showBell = useBottomTabs()
 
   function showToast(msg: string) {
     setToastText(msg)
@@ -151,7 +155,7 @@ export default function Feed() {
       statut: d.statut ?? 'vecu',
       categorie: d.categorie ?? null,
       visibilite: d.visibilite ?? 'friends',
-      username: d.profiles?.username ?? 'Quelqu\'un',
+      username: d.profiles?.username ?? t("Quelqu'un"),
       avatar_url: d.profiles?.avatar_url ?? null,
       photos: (d.date_photos ?? [])
         .sort((a: any, b: any) => a.ordre - b.ordre)
@@ -322,24 +326,24 @@ export default function Feed() {
         ListHeaderComponent={
           <View>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>Feed</Text>
-              {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
+              <Text style={styles.title}>{t("Feed")}</Text>
+              {showBell && <NotificationBell style={styles.bellBtn} />}
             </View>
 
             {showingOffline && (
               <View style={styles.offlineBanner}>
-                <Text style={styles.offlineBannerText}>📡 Hors ligne — affichage du dernier feed enregistré</Text>
+                <Text style={styles.offlineBannerText}>{t("📡 Hors ligne — affichage du dernier feed enregistré")}</Text>
                 <TouchableOpacity onPress={loadFeed}>
-                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                  <Text style={styles.errorBannerRetry}>{t("Réessayer")}</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {loadError && !showingOffline && (
               <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>Impossible de charger le feed. Vérifie ta connexion.</Text>
+                <Text style={styles.errorBannerText}>{t("Impossible de charger le feed. Vérifie ta connexion.")}</Text>
                 <TouchableOpacity onPress={loadFeed}>
-                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                  <Text style={styles.errorBannerRetry}>{t("Réessayer")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -351,7 +355,7 @@ export default function Feed() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.anniversaryText}>
-                  🎉 Il y a un an : {anniversaries[0].name}{anniversaries.length > 1 ? ` (+${anniversaries.length - 1})` : ''}
+                  {t("🎉 Il y a un an : {nom}", { nom: anniversaries[0].name })}{anniversaries.length > 1 ? ` (+${anniversaries.length - 1})` : ''}
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color="#D4517E" />
               </TouchableOpacity>
@@ -363,7 +367,7 @@ export default function Feed() {
                 style={styles.searchInput}
                 value={feedSearch}
                 onChangeText={setFeedSearch}
-                placeholder="Rechercher un lieu, un ami..."
+                placeholder={t("Rechercher un lieu, un ami...")}
                 placeholderTextColor="#B8A9A0"
                 clearButtonMode="while-editing"
               />
@@ -374,7 +378,7 @@ export default function Feed() {
                 style={[styles.catFilter, feedFilterCat === null && styles.catFilterActive]}
                 onPress={() => setFeedFilterCat(null)}
               >
-                <Text style={[styles.catFilterText, feedFilterCat === null && styles.catFilterTextActive]}>Tous</Text>
+                <Text style={[styles.catFilterText, feedFilterCat === null && styles.catFilterTextActive]}>{t("Tous")}</Text>
               </TouchableOpacity>
               {CATEGORIES.map((c) => (
                 <TouchableOpacity
@@ -382,7 +386,7 @@ export default function Feed() {
                   style={[styles.catFilter, feedFilterCat === c.key && styles.catFilterActive]}
                   onPress={() => setFeedFilterCat(feedFilterCat === c.key ? null : c.key)}
                 >
-                  <Text style={[styles.catFilterText, feedFilterCat === c.key && styles.catFilterTextActive]}>{c.emoji} {c.label}</Text>
+                  <Text style={[styles.catFilterText, feedFilterCat === c.key && styles.catFilterTextActive]}>{c.emoji} {t(c.label)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -400,7 +404,7 @@ export default function Feed() {
           >
             {item.conseil_vivement && (
               <View style={styles.conseilBanner}>
-                <Text style={styles.conseilBannerText}>💖 Conseillé vivement</Text>
+                <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
               </View>
             )}
             <View style={styles.cardHeader}>
@@ -417,7 +421,7 @@ export default function Feed() {
                   </View>
                 )}
                 <Text style={styles.username}>
-                  {item.username}{item.user_id === myId ? ' · Toi' : ''}
+                  {item.username}{item.user_id === myId ? t(" · Toi") : ''}
                 </Text>
               </TouchableOpacity>
               <Text style={styles.note}>{item.note_globale}/20</Text>
@@ -448,7 +452,7 @@ export default function Feed() {
 
             {item.participants.length > 0 && (
               <View style={styles.participantsRow}>
-                <Text style={styles.participantsLabel}>👥 Avec</Text>
+                <Text style={styles.participantsLabel}>{t("👥 Avec")}</Text>
                 {item.participants.map((p, idx) => (
                   <TouchableOpacity key={p.id} onPress={() => navigateToUser(p.id)}>
                     <Text style={styles.participantLink}>
@@ -520,10 +524,13 @@ export default function Feed() {
           !loading ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>💌</Text>
-              <Text style={styles.emptyText}>Aucun date dans ton feed</Text>
-              <Text style={styles.emptySubtext}>Ajoute des amis pour voir leurs dates ici</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/friends')}>
-                <Text style={styles.emptyButtonText}>Gérer mes amis</Text>
+              <Text style={styles.emptyText}>{t("Ton feed est encore vide")}</Text>
+              <Text style={styles.emptySubtext}>{t("Note ton premier date ou ajoute des amis pour voir les leurs ici")}</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/(tabs)/rate')}>
+                <Text style={styles.emptyButtonText}>{t("Noter un date")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.emptyButtonSecondary} onPress={() => router.push('/friends')}>
+                <Text style={styles.emptyButtonSecondaryText}>{t("Trouver mes amis")}</Text>
               </TouchableOpacity>
             </View>
           ) : null
@@ -605,9 +612,11 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 40, marginBottom: 12 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#5C4A45' },
-  emptySubtext: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 20 },
+  emptySubtext: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 20, textAlign: 'center', paddingHorizontal: 24 },
   emptyButton: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
   emptyButtonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  emptyButtonSecondary: { marginTop: 10, paddingVertical: 10, paddingHorizontal: 24 },
+  emptyButtonSecondaryText: { color: '#D4517E', fontWeight: '600', fontSize: 15 },
   toast: { position: 'absolute', bottom: 32, left: 24, right: 24, backgroundColor: '#2D6A2D', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 3 }, shadowRadius: 8, elevation: 6 },
   toastText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 })

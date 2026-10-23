@@ -1,11 +1,14 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Modal, ScrollView } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native'
+import { showAlert } from '../lib/alert'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { CATEGORIES } from '../lib/categories'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
 type WishItem = {
   id: string
@@ -68,15 +71,17 @@ export default function Wishlist() {
       note: note.trim() || null,
     }
 
+    let error = null
     if (editingId) {
-      await supabase.from('wishlist_lieux').update(payload).eq('id', editingId)
+      ({ error } = await supabase.from('wishlist_lieux').update(payload).eq('id', editingId))
     } else {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setSaving(false); return }
-      await supabase.from('wishlist_lieux').insert({ user_id: user.id, ...payload })
+      ({ error } = await supabase.from('wishlist_lieux').insert({ user_id: user.id, ...payload }))
     }
 
     setSaving(false)
+    if (error) { showAlert(t("Impossible d'enregistrer ce lieu"), error.message); return }
     setShowAdd(false)
     setEditingId(null)
     setNom(''); setAdresse(''); setCategorie(null); setNote('')
@@ -91,16 +96,7 @@ export default function Wishlist() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lieux à essayer</Text>
-        <TouchableOpacity onPress={openAdd} style={styles.addBtn}>
-          <Ionicons name="add" size={24} color="#D4517E" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Lieux à essayer")} right={<TouchableOpacity onPress={openAdd} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Ajouter un lieu")}><Ionicons name="add" size={26} color="#D4517E" /></TouchableOpacity>} />
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
@@ -111,16 +107,16 @@ export default function Wishlist() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             items.length > 0 ? (
-              <Text style={styles.subtitle}>Des lieux que tu n'as pas encore testés — pas encore vécus ni notés</Text>
+              <Text style={styles.subtitle}>{t("Les lieux que tu veux tester. Une fois sur place, appuie sur « J'y suis allé » pour le noter.")}</Text>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>📍</Text>
-              <Text style={styles.emptyText}>Aucun lieu à essayer pour l'instant</Text>
-              <Text style={styles.emptySub}>Ajoute des lieux que tu veux tester lors d'un prochain date. Une fois testés, note-les dans "Noter" — ils apparaîtront dans tes dates favoris si tu les bookmarks.</Text>
+              <Text style={styles.emptyText}>{t("Aucun lieu à essayer pour l'instant")}</Text>
+              <Text style={styles.emptySub}>{t("Garde ici les restos, bars ou activités qu'on t'a conseillés. Le jour où tu y vas, tu pourras le noter en un geste.")}</Text>
               <TouchableOpacity style={styles.emptyBtn} onPress={openAdd}>
-                <Text style={styles.emptyBtnText}>Ajouter un lieu</Text>
+                <Text style={styles.emptyBtnText}>{t("Ajouter un lieu")}</Text>
               </TouchableOpacity>
             </View>
           }
@@ -133,36 +129,43 @@ export default function Wishlist() {
                   {item.categorie && (
                     <View style={styles.catChip}>
                       <Text style={styles.catChipText}>
-                        {CATEGORIES.find((c) => c.key === item.categorie)?.emoji ?? ''} {CATEGORIES.find((c) => c.key === item.categorie)?.label ?? item.categorie}
+                        {CATEGORIES.find((c) => c.key === item.categorie)?.emoji ?? ''} {(() => { const c = CATEGORIES.find((c) => c.key === item.categorie); return c ? t(c.label) : item.categorie })()}
                       </Text>
                     </View>
                   )}
                   {item.note && <Text style={styles.cardNote}>{item.note}</Text>}
+                  <TouchableOpacity
+                    style={styles.wentBtn}
+                    onPress={() => router.push({ pathname: '/(tabs)/rate', params: { wishlistId: item.id } } as any)}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={16} color="#D4517E" />
+                    <Text style={styles.wentBtnText}>{t("J'y suis allé, le noter")}</Text>
+                  </TouchableOpacity>
                 </View>
                 {confirmDeleteId === item.id ? (
                   <View style={styles.confirmRow}>
-                    <Text style={styles.confirmQuestion}>Supprimer ?</Text>
+                    <Text style={styles.confirmQuestion}>{t("Supprimer ?")}</Text>
                     <TouchableOpacity
                       onPress={() => setConfirmDeleteId(null)}
                       style={styles.confirmNo}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Text style={styles.confirmNoText}>Annuler</Text>
+                      <Text style={styles.confirmNoText}>{t("Annuler")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleDelete(item.id)}
                       style={styles.confirmYes}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <Text style={styles.confirmYesText}>Supprimer</Text>
+                      <Text style={styles.confirmYesText}>{t("Supprimer")}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <View style={styles.cardActions}>
-                    <TouchableOpacity onPress={() => openEdit(item)} style={styles.deleteBtn}>
+                    <TouchableOpacity onPress={() => openEdit(item)} style={styles.deleteBtn} accessibilityLabel={t("Modifier")}>
                       <Ionicons name="pencil-outline" size={18} color="#B8A9A0" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setConfirmDeleteId(item.id)} style={styles.deleteBtn}>
+                    <TouchableOpacity onPress={() => setConfirmDeleteId(item.id)} style={styles.deleteBtn} accessibilityLabel={t("Supprimer")}>
                       <Ionicons name="trash-outline" size={18} color="#B8A9A0" />
                     </TouchableOpacity>
                   </View>
@@ -175,36 +178,37 @@ export default function Wishlist() {
 
       <Modal visible={showAdd} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAdd(false)}>
         <SafeAreaView style={styles.modalSafe} edges={['top']}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowAdd(false)}>
-              <Text style={styles.modalCancel}>Annuler</Text>
+              <Text style={styles.modalCancel}>{t("Annuler")}</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{editingId ? 'Modifier le lieu' : 'Ajouter un lieu'}</Text>
+            <Text style={styles.modalTitle}>{editingId ? t("Modifier le lieu") : t("Ajouter un lieu")}</Text>
             <TouchableOpacity onPress={handleSave} disabled={!nom.trim() || saving}>
               <Text style={[styles.modalSave, (!nom.trim() || saving) && styles.modalSaveDisabled]}>
-                {saving ? '...' : editingId ? 'Enregistrer' : 'Ajouter'}
+                {saving ? '...' : editingId ? t("Enregistrer") : t("Ajouter")}
               </Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.fieldLabel}>Nom du lieu *</Text>
+          <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <Text style={styles.fieldLabel}>{t("Nom du lieu *")}</Text>
             <TextInput
               style={styles.input}
               value={nom}
               onChangeText={setNom}
-              placeholder="Restaurant, bar, musée..."
+              placeholder={t("Restaurant, bar, musée...")}
               placeholderTextColor="#B8A9A0"
               autoFocus
             />
-            <Text style={styles.fieldLabel}>Adresse (optionnel)</Text>
+            <Text style={styles.fieldLabel}>{t("Adresse (optionnel)")}</Text>
             <TextInput
               style={styles.input}
               value={adresse}
               onChangeText={setAdresse}
-              placeholder="Adresse ou quartier"
+              placeholder={t("Adresse ou quartier")}
               placeholderTextColor="#B8A9A0"
             />
-            <Text style={styles.fieldLabel}>Catégorie</Text>
+            <Text style={styles.fieldLabel}>{t("Catégorie")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow} contentContainerStyle={{ gap: 8 }}>
               {CATEGORIES.map((c) => (
                 <TouchableOpacity
@@ -213,21 +217,22 @@ export default function Wishlist() {
                   onPress={() => setCategorie(categorie === c.key ? null : c.key)}
                 >
                   <Text style={[styles.catOptionText, categorie === c.key && styles.catOptionTextActive]}>
-                    {c.emoji} {c.label}
+                    {c.emoji} {t(c.label)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Text style={styles.fieldLabel}>Note personnelle (optionnel)</Text>
+            <Text style={styles.fieldLabel}>{t("Note personnelle (optionnel)")}</Text>
             <TextInput
               style={[styles.input, styles.inputMulti]}
               value={note}
               onChangeText={setNote}
-              placeholder="Pourquoi tu veux y aller, recommandé par..."
+              placeholder={t("Pourquoi tu veux y aller, recommandé par...")}
               placeholderTextColor="#B8A9A0"
               multiline
             />
           </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -236,6 +241,8 @@ export default function Wishlist() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  wentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#FDE8F0' },
+  wentBtnText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

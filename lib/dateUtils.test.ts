@@ -1,4 +1,4 @@
-import { calculerMoyenne, trouverMeilleurLieu, validerFormulaireDate, clamperNote, formatNote, todayIso, formaterDate, DateRow } from './dateUtils'
+import { calculerMoyenne, trouverMeilleurLieu, validerFormulaireDate, clamperNote, formatNote, todayIso, formaterDate, formaterIlYa, DateRow } from './dateUtils'
 
 const faireDate = (overrides: Partial<DateRow>): DateRow => ({
   id: '1',
@@ -151,5 +151,20 @@ describe('formaterDate', () => {
   it('retourne la chaîne telle quelle si elle n\'a pas 3 segments', () => {
     expect(formaterDate('invalide')).toBe('invalide')
     expect(formaterDate('2026-07')).toBe('2026-07')
+  })
+})
+describe('formaterIlYa', () => {
+  const now = new Date(2026, 9, 23, 12, 0, 0)
+
+  it('affiche les durées récentes en relatif', () => {
+    expect(formaterIlYa(new Date(2026, 9, 23, 11, 59, 30).toISOString(), now)).toBe("à l'instant")
+    expect(formaterIlYa(new Date(2026, 9, 23, 11, 45).toISOString(), now)).toBe('il y a 15 min')
+    expect(formaterIlYa(new Date(2026, 9, 23, 9, 0).toISOString(), now)).toBe('il y a 3 h')
+    expect(formaterIlYa(new Date(2026, 9, 22, 10, 0).toISOString(), now)).toBe('hier')
+    expect(formaterIlYa(new Date(2026, 9, 19, 12, 0).toISOString(), now)).toBe('il y a 4 jours')
+  })
+
+  it('affiche la date complète au-delà d\'une semaine', () => {
+    expect(formaterIlYa(new Date(2026, 8, 1, 12, 0).toISOString(), now)).toBe('1 septembre 2026')
   })
 })

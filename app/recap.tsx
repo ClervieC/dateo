@@ -4,9 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { CATEGORIES, getCategoryLabel } from '../lib/categories'
+import { formatNote, nomsDesMois } from '../lib/dateUtils'
+import { useGoBack } from '../lib/ScreenHeader'
+import { t, tn } from '../lib/i18n'
 
 const YEAR = new Date().getFullYear()
-const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 type DateRow = { lieu: string; intitule: string | null; note_globale: number; date_du_date: string; categorie: string | null }
 
@@ -16,7 +18,9 @@ export default function Recap() {
   const [slide, setSlide] = useState(0)
   const listRef = useRef<FlatList>(null)
   const router = useRouter()
+  const close = useGoBack('/(tabs)/profile')
   const { width } = useWindowDimensions()
+  const MOIS = nomsDesMois('long')
 
   useEffect(() => {
     async function load() {
@@ -41,7 +45,7 @@ export default function Recap() {
   const moyenne = dates.length > 0 ? (dates.reduce((s, d) => s + d.note_globale, 0) / dates.length) : 0
 
   const moisMap: Record<number, number> = {}
-  for (const d of dates) { const m = new Date(d.date_du_date).getMonth(); moisMap[m] = (moisMap[m] ?? 0) + 1 }
+  for (const d of dates) { const m = Number(d.date_du_date.slice(5, 7)) - 1; moisMap[m] = (moisMap[m] ?? 0) + 1 }
   const meilleurMoisIdx = Object.entries(moisMap).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
 
   const catMap: Record<string, number> = {}
@@ -57,52 +61,52 @@ export default function Recap() {
     {
       bg: '#D4517E', textColor: '#fff',
       emoji: '🎉',
-      title: `${YEAR}, c'est wrap !`,
+      title: t("Ton année {annee} en dates", { annee: YEAR }),
       value: String(dates.length),
-      label: dates.length === 1 ? 'date vécu cette année' : 'dates vécus cette année',
+      label: dates.length === 1 ? t("date vécu cette année") : t("dates vécus cette année"),
     },
     meilleur ? {
       bg: '#fff', textColor: '#5C4A45',
       emoji: '⭐',
-      title: 'Ton meilleur date',
-      value: `${meilleur.note_globale}/20`,
+      title: t("Ton meilleur date"),
+      value: `${formatNote(meilleur.note_globale)}/20`,
       label: meilleur.intitule ?? meilleur.lieu,
       sub: meilleur.intitule ? `📍 ${meilleur.lieu}` : undefined,
     } : null,
     {
       bg: '#FDE8F0', textColor: '#D4517E',
       emoji: '📊',
-      title: 'Ta note moyenne',
+      title: t("Ta note moyenne"),
       value: `${moyenne.toFixed(1)}/20`,
-      label: moyenne >= 15 ? 'Vous avez de très bons goûts !' : moyenne >= 10 ? 'Pas mal du tout !' : 'Il y a encore de la marge !',
+      label: moyenne >= 15 ? t("Tu as de très bons goûts !") : moyenne >= 10 ? t("Pas mal du tout !") : t("Il y a encore de la marge !"),
     },
     meilleurMoisIdx ? {
       bg: '#5C4A45', textColor: '#fff',
       emoji: '📅',
-      title: 'Mois le plus actif',
+      title: t("Mois le plus actif"),
       value: MOIS[Number(meilleurMoisIdx[0])],
-      label: `${meilleurMoisIdx[1]} date${Number(meilleurMoisIdx[1]) > 1 ? 's' : ''} ce mois-là`,
+      label: tn(Number(meilleurMoisIdx[1]), "{n} date ce mois-là", "{n} dates ce mois-là"),
     } : null,
     topLieu ? {
       bg: '#F0D9D9', textColor: '#5C4A45',
       emoji: '📍',
-      title: 'Lieu le plus visité',
+      title: t("Lieu le plus visité"),
       value: topLieu[0],
-      label: `${topLieu[1]}x cette année`,
+      label: t("{n}x cette année", { n: topLieu[1] }),
     } : null,
     topCat ? {
       bg: '#FFF8F5', textColor: '#5C4A45',
       emoji: getCategoryLabel(topCat[0]).split(' ')[0],
-      title: 'Ta catégorie favorite',
+      title: t("Ta catégorie favorite"),
       value: getCategoryLabel(topCat[0]).split(' ').slice(1).join(' '),
-      label: `${topCat[1]} date${topCat[1] > 1 ? 's' : ''} dans cette catégorie`,
+      label: tn(topCat[1], "{n} date dans cette catégorie", "{n} dates dans cette catégorie"),
     } : null,
     {
       bg: '#D4517E', textColor: '#fff',
       emoji: '💖',
-      title: 'À l\'année prochaine !',
+      title: t("À l'année prochaine !"),
       value: `${YEAR + 1}`,
-      label: 'Encore plein de beaux moments devant vous',
+      label: t("Encore plein de beaux moments devant toi"),
       isLast: true,
     },
   ] as (Slide | null)[]).filter(Boolean) as Slide[]
@@ -113,7 +117,7 @@ export default function Recap() {
       listRef.current?.scrollToIndex({ index: next, animated: true })
       setSlide(next)
     } else {
-      router.back()
+      close()
     }
   }
 
@@ -137,10 +141,13 @@ export default function Recap() {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: '#D4517E' }]} edges={['top']}>
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyEmoji}>📭</Text>
-          <Text style={styles.emptyTitle}>Pas encore de dates en {YEAR}</Text>
-          <Text style={styles.emptySub}>Reviens à la fin de l'année !</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => router.back()}>
-            <Text style={styles.emptyBtnText}>Retour</Text>
+          <Text style={styles.emptyTitle}>{t("Pas encore de dates en {annee}", { annee: YEAR })}</Text>
+          <Text style={styles.emptySub}>{t("Note tes dates au fil de l'année pour découvrir ton récap ici.")}</Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/rate')}>
+            <Text style={styles.emptyBtnText}>{t("Noter un date")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginTop: 14 }} onPress={close}>
+            <Text style={[styles.emptyBtnText, { color: '#fff' }]}>{t("Retour")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -149,7 +156,7 @@ export default function Recap() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: slides[slide]?.bg ?? '#D4517E' }]} edges={['top', 'bottom']}>
-      <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.closeBtn} onPress={close} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel={t("Fermer")}>
         <Text style={[styles.closeText, { color: slides[slide]?.textColor ?? '#fff' }]}>✕</Text>
       </TouchableOpacity>
 
@@ -189,12 +196,12 @@ export default function Recap() {
         <View style={styles.footerBtnRow}>
           {slide > 0 && (
             <TouchableOpacity style={[styles.nextBtn, styles.backBtn, { borderColor: slides[slide]?.textColor ?? '#fff' }]} onPress={goBack}>
-              <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>← Précédent</Text>
+              <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>{t("← Précédent")}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={[styles.nextBtn, { flex: 1, borderColor: slides[slide]?.textColor ?? '#fff' }]} onPress={goNext}>
             <Text style={[styles.nextBtnText, { color: slides[slide]?.textColor ?? '#fff' }]}>
-              {slide === slides.length - 1 ? 'Fermer' : 'Suivant →'}
+              {slide === slides.length - 1 ? t("Fermer") : t("Suivant →")}
             </Text>
           </TouchableOpacity>
         </View>

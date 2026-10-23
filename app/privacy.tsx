@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { webContentStyle } from '../lib/webStyles'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t, getLang } from '../lib/i18n'
 
 const SECTIONS = [
   {
@@ -44,26 +46,61 @@ const SECTIONS = [
   },
 ]
 
+// Version anglaise (même structure que SECTIONS)
+const SECTIONS_EN = [
+  {
+    title: 'What data is collected',
+    body:
+      'Your email address and a username (account). The dates you log: place, date, scores, comment, photos, category. ' +
+      'Optionally: your city (to suggest local date ideas) and a monthly goal. ' +
+      'Your interactions with friends: comments, mentions, reactions ("likes"), favorites, friend requests, couple relationship. ' +
+      'A push notification token (Expo), used only to send you alerts about your activity.',
+  },
+  {
+    title: 'Why this data',
+    body:
+      'It is used only to make the app work: showing your date journal, your friends feed, your statistics and badges, ' +
+      'notifying you when someone interacts with you, and suggesting recommendations based on your past preferences.',
+  },
+  {
+    title: 'Who can see what',
+    body:
+      'A date is visible to your friends only if you set it to "Friends" visibility — otherwise it stays private, visible to you alone. ' +
+      'Your email, your notification token and third-party account details are never shared with other users. ' +
+      'Your username and profile photo are visible to the people you are connected with (friends, partner) or in the context of a shared date.',
+  },
+  {
+    title: 'Where the data is stored',
+    body:
+      'All data is hosted by Supabase (Postgres database and file storage), with access protected by authentication and row-level security rules.',
+  },
+  {
+    title: 'Your rights',
+    body:
+      'At any time you can export all of your personal data (Settings → Full export), or permanently delete your account and all associated data (Settings → Delete my account). ' +
+      'Deletion cannot be undone and also removes what you left on other users\' dates (comments, reactions, favorites).',
+  },
+  {
+    title: 'Notifications',
+    body:
+      'Push notifications are optional and depend on the permission you give your device. You can turn them off at any time in your phone settings.',
+  },
+]
+
 export default function Privacy() {
+  const sections = getLang() === 'en' ? SECTIONS_EN : SECTIONS
   const router = useRouter()
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confidentialité</Text>
-        <View style={{ width: 80 }} />
-      </View>
+      <ScreenHeader title={t("Confidentialité")} />
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
         <Text style={styles.intro}>
-          Dateo est un journal de dates personnel, pensé pour rester privé par défaut. Voici, en clair, ce qui est collecté et comment c'est utilisé.
+          {t("Dateo est un journal de dates personnel, pensé pour rester privé par défaut. Voici, en clair, ce qui est collecté et comment c'est utilisé.")}
         </Text>
 
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <View key={s.title} style={styles.card}>
             <Text style={styles.cardTitle}>{s.title}</Text>
             <Text style={styles.cardBody}>{s.body}</Text>

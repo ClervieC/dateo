@@ -143,3 +143,8 @@ create table if not exists rate_limits (
 alter table rate_limits enable row level security;
 -- Aucune policy select/insert/update pour les rôles anon/authenticated : uniquement
 -- accessible via le service_role utilisé par les edge functions.
+
+-- Langue choisie dans l'app (fr/en) : utilisée par les edge functions pour envoyer les
+-- notifications push dans la langue du destinataire. Mise à jour par l'app à la connexion
+-- et à chaque changement de langue.
+alter table profiles add column if not exists langue text not null default 'fr' check (langue in ('fr', 'en'));

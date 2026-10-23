@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
-import { formaterDate } from '../lib/dateUtils'
+import { formaterIlYa } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
 import { NOTIF_LAST_SEEN_KEY, markNotificationsSeen } from '../lib/notifications'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t, tn } from '../lib/i18n'
 
 const NOTIF_READ_IDS_KEY = 'notifReadIds'
 
@@ -27,6 +29,10 @@ export default function Notifications() {
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<'all' | 'reaction' | 'comment' | 'mention'>('all')
+  // Demandes d'ami / invitation couple en attente : affichées en tête, car elles
+  // n'apparaissent pas dans la liste des likes / commentaires.
+  const [pendingFriends, setPendingFriends] = useState(0)
+  const [pendingCouple, setPendingCouple] = useState(false)
   const router = useRouter()
   const lastSeenAtOpenRef = useRef<string | null>(null)
 
@@ -52,7 +58,13 @@ export default function Notifications() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
 
-    const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+    const [{ data: myProfile }, { count: friendReqCount }, { data: coupleInvite }] = await Promise.all([
+      supabase.from('profiles').select('username').eq('id', user.id).single(),
+      supabase.from('friends').select('*', { count: 'exact', head: true }).eq('friend_id', user.id).eq('status', 'pending'),
+      supabase.from('couples').select('id').eq('user2_id', user.id).eq('status', 'pending').maybeSingle(),
+    ])
+    setPendingFriends(friendReqCount ?? 0)
+    setPendingCouple(!!coupleInvite)
 
     const { data: myDates } = await supabase
       .from('dates')
@@ -162,21 +174,35 @@ export default function Notifications() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 80 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/feed" title={t("Notifications")} />
 
-      <View style={styles.filterRow}>
+      <View style={[webContentStyle, { flexShrink: 0 }]}>
+      {(pendingFriends > 0 || pendingCouple) && (
+        <View style={styles.requestsBox}>
+          {pendingFriends > 0 && (
+            <TouchableOpacity style={styles.requestRow} onPress={() => router.push('/friends')}>
+              <Ionicons name="person-add" size={18} color="#D4517E" />
+              <Text style={styles.requestText}>
+                {tn(pendingFriends, "{n} demande d'ami en attente", "{n} demandes d'ami en attente")}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color="#D4517E" />
+            </TouchableOpacity>
+          )}
+          {pendingCouple && (
+            <TouchableOpacity style={styles.requestRow} onPress={() => router.push('/couple')}>
+              <Ionicons name="heart" size={18} color="#D4517E" />
+              <Text style={styles.requestText}>{t("Invitation en mode couple à accepter")}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#D4517E" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {([
-          { key: 'all', label: 'Toutes' },
-          { key: 'reaction', label: '❤️ Likes' },
-          { key: 'comment', label: '💬 Commentaires' },
-          { key: 'mention', label: '📣 Mentions' },
+          { key: 'all', label: t("Toutes") },
+          { key: 'reaction', label: t("❤️ Likes") },
+          { key: 'comment', label: t("💬 Commentaires") },
+          { key: 'mention', label: t("📣 Mentions") },
         ] as const).map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -186,6 +212,7 @@ export default function Notifications() {
             <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
+      </ScrollView>
       </View>
 
       {loading ? (
@@ -198,8 +225,8 @@ export default function Notifications() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>🔔</Text>
-              <Text style={styles.emptyText}>Aucune notification</Text>
-              <Text style={styles.emptySub}>Les likes et commentaires sur tes dates apparaîtront ici</Text>
+              <Text style={styles.emptyText}>{t("Aucune notification")}</Text>
+              <Text style={styles.emptySub}>{t("Les likes et commentaires sur tes dates apparaîtront ici")}</Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -221,13 +248,13 @@ export default function Notifications() {
                 <View style={styles.body}>
                   <Text style={styles.notifText}>
                     <Text style={styles.actor}>@{item.actor_username}</Text>
-                    {item.type === 'reaction' ? ' a aimé ton date ' : item.type === 'mention' ? ' t\'a mentionné sur ' : ' a commenté ton date '}
+                    {item.type === 'reaction' ? t(" a aimé ton date ") : item.type === 'mention' ? t(" t'a mentionné sur ") : t(" a commenté ton date ")}
                     <Text style={styles.dateName}>{item.date_name}</Text>
                   </Text>
                   {(item.type === 'comment' || item.type === 'mention') && item.content && (
                     <Text style={styles.preview} numberOfLines={1}>"{item.content}"</Text>
                   )}
-                  <Text style={styles.time}>{formaterDate(item.created_at.slice(0, 10))}</Text>
+                  <Text style={styles.time}>{formaterIlYa(item.created_at)}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#D0C5C0" />
               </TouchableOpacity>
@@ -246,7 +273,10 @@ const styles = StyleSheet.create({
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#5C4A45' },
   content: { padding: 20, paddingBottom: 60 },
-  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12, flexWrap: 'wrap' },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 2 },
+  requestsBox: { marginHorizontal: 20, marginTop: 12, backgroundColor: '#FDE8F0', borderRadius: 12, overflow: 'hidden' },
+  requestRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  requestText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#D4517E' },
   filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9D9' },
   filterChipActive: { backgroundColor: '#D4517E', borderColor: '#D4517E' },
   filterChipText: { fontSize: 12, color: '#5C4A45', fontWeight: '500' },

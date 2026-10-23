@@ -4,8 +4,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
-import { formaterDate } from '../lib/dateUtils'
+import { formaterDate, formatNote } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
 type FavItem = {
   id: string
@@ -36,7 +38,8 @@ export default function Favorites() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    setItems((data ?? []).map((f: any) => ({
+    // Un date supprimé ou redevenu privé n'est plus lisible : on ne l'affiche pas
+    setItems((data ?? []).filter((f: any) => f.dates).map((f: any) => ({
       id: f.id,
       date_id: f.date_id,
       intitule: f.dates?.intitule ?? null,
@@ -59,14 +62,7 @@ export default function Favorites() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Favoris</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Favoris")} />
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
@@ -78,8 +74,11 @@ export default function Favorites() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>🔖</Text>
-              <Text style={styles.emptyText}>Aucun favori pour l'instant</Text>
-              <Text style={styles.emptySub}>Appuie sur le marque-page dans le feed pour sauvegarder un date</Text>
+              <Text style={styles.emptyText}>{t("Aucun favori pour l'instant")}</Text>
+              <Text style={styles.emptySub}>{t("Appuie sur le marque-page 🔖 d'un date dans le feed pour le retrouver ici")}</Text>
+              <TouchableOpacity style={styles.emptyCta} onPress={() => router.replace('/(tabs)/feed')}>
+                <Text style={styles.emptyCtaText}>{t("Aller au feed")}</Text>
+              </TouchableOpacity>
             </View>
           }
           renderItem={({ item }) => (
@@ -100,11 +99,12 @@ export default function Favorites() {
                   )}
                 </View>
                 <View style={styles.cardHeaderRight}>
-                  <Text style={styles.note}>{item.note_globale}/20</Text>
+                  <Text style={styles.note}>{formatNote(item.note_globale)}/20</Text>
                   <TouchableOpacity
                     onPress={() => removeFavorite(item)}
                     disabled={removingId === item.id}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={t("Retirer des favoris")}
                   >
                     <Ionicons name="bookmark" size={20} color="#D4517E" />
                   </TouchableOpacity>
@@ -121,6 +121,8 @@ export default function Favorites() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

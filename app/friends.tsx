@@ -1,24 +1,30 @@
-import { useState, useCallback, useRef } from 'react'
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native'
+import { useState, useCallback, useRef, ReactNode } from 'react'
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Image } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
-import { requeteValide, retirerDeLaListe } from '../lib/friendsUtils'
+import { requeteValide } from '../lib/friendsUtils'
 import { webContentStyle } from '../lib/webStyles'
+import { showAlert, confirmAction } from '../lib/alert'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
-
-type Profile = { id: string; username: string }
-type FriendRequest = { id: string; user_id: string; friend_id: string; status: string; username: string }
-type Friend = { id: string; username: string }
+type Person = { id: string; username: string; avatar_url: string | null }
+// rowId = id de la ligne « friends », userId = l'autre personne
+type Relation = Person & { rowId: string }
+type RelationStatus = 'friend' | 'sent' | 'received' | 'none'
 
 export default function Friends() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Profile[]>([])
-  const [pending, setPending] = useState<FriendRequest[]>([])
-  const [friends, setFriends] = useState<Friend[]>([])
+  const [results, setResults] = useState<Person[]>([])
+  const [received, setReceived] = useState<Relation[]>([])
+  const [sent, setSent] = useState<Relation[]>([])
+  const [friends, setFriends] = useState<Relation[]>([])
   const [myId, setMyId] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [myUsername, setMyUsername] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
 
@@ -27,114 +33,76 @@ export default function Friends() {
     if (!user) return
     setMyId(user.id)
 
-    const [
-      { data: pendingData },
-      { data: sentFriends },
-      { data: receivedFriends },
-    ] = await Promise.all([
+    const [{ data: rows }, { data: me }] = await Promise.all([
       supabase
         .from('friends')
         .select('id, user_id, friend_id, status')
-        .eq('friend_id', user.id)
-        .eq('status', 'pending'),
-      supabase
-        .from('friends')
-        .select('id, friend_id')
-        .eq('user_id', user.id)
-        .eq('status', 'accepted'),
-      supabase
-        .from('friends')
-        .select('id, user_id')
-        .eq('friend_id', user.id)
-        .eq('status', 'accepted'),
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`),
+      supabase.from('profiles').select('username').eq('id', user.id).single(),
     ])
+    setMyUsername(me?.username ?? '')
 
-    // Récupère tous les usernames nécessaires en une seule requête
-    const allUserIds = [
-      ...(pendingData ?? []).map((d) => d.user_id),
-      ...(sentFriends ?? []).map((d) => d.friend_id),
-      ...(receivedFriends ?? []).map((d) => d.user_id),
-    ]
-    const uniqueIds = Array.from(new Set(allUserIds))
+    const otherIds = [...new Set((rows ?? []).map((r) => r.user_id === user.id ? r.friend_id : r.user_id))]
+    const { data: profiles } = otherIds.length > 0
+      ? await supabase.from('profiles').select('id, username, avatar_url').in('id', otherIds)
+      : { data: [] as Person[] }
+    const byId = new Map((profiles ?? []).map((p: any) => [p.id, p as Person]))
 
-    const { data: profiles } = uniqueIds.length > 0
-      ? await supabase.from('profiles').select('id, username').in('id', uniqueIds)
-      : { data: [] }
-
-    const usernameMap = new Map((profiles ?? []).map((p) => [p.id, p.username]))
-
-    if (pendingData) {
-      setPending(
-        pendingData.map((d) => ({
-          id: d.id,
-          user_id: d.user_id,
-          friend_id: d.friend_id,
-          status: d.status,
-          username: usernameMap.get(d.user_id) ?? 'Inconnu',
-        }))
-      )
+    const toRelation = (r: any): Relation => {
+      const otherId = r.user_id === user.id ? r.friend_id : r.user_id
+      const p = byId.get(otherId)
+      return { rowId: r.id, id: otherId, username: p?.username ?? t("Inconnu"), avatar_url: p?.avatar_url ?? null }
     }
-
-    setFriends([
-      ...(sentFriends ?? []).map((f) => ({ id: f.id, username: usernameMap.get(f.friend_id) ?? 'Inconnu' })),
-      ...(receivedFriends ?? []).map((f) => ({ id: f.id, username: usernameMap.get(f.user_id) ?? 'Inconnu' })),
-    ])
+    const all = rows ?? []
+    setFriends(all.filter((r) => r.status === 'accepted').map(toRelation).sort((a, b) => a.username.localeCompare(b.username)))
+    setReceived(all.filter((r) => r.status === 'pending' && r.friend_id === user.id).map(toRelation))
+    setSent(all.filter((r) => r.status === 'pending' && r.user_id === user.id).map(toRelation))
   }, [])
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData()
-    }, [loadData])
-  )
+  useFocusEffect(useCallback(() => { loadData() }, [loadData]))
+
+  function statusOf(personId: string): RelationStatus {
+    if (friends.some((f) => f.id === personId)) return 'friend'
+    if (sent.some((f) => f.id === personId)) return 'sent'
+    if (received.some((f) => f.id === personId)) return 'received'
+    return 'none'
+  }
 
   async function doSearch(text: string) {
-    if (!requeteValide(text)) {
-      setResults([])
-      return
-    }
-    setLoading(true)
+    if (!requeteValide(text)) { setResults([]); setSearching(false); return }
+    setSearching(true)
+    const pattern = `%${text.trim().replace(/[%_]/g, (c) => `\\${c}`)}%`
     const [{ data, error }, { data: blockedByMe }, { data: blockedMe }] = await Promise.all([
-      supabase.from('profiles').select('id, username').ilike('username', `%${text}%`).neq('id', myId).limit(10),
+      supabase.from('profiles').select('id, username, avatar_url').ilike('username', pattern).neq('id', myId).limit(15),
       supabase.from('user_blocks').select('blocked_id').eq('blocker_id', myId),
       supabase.from('user_blocks').select('blocker_id').eq('blocked_id', myId),
     ])
-
     const blocked = new Set([
       ...(blockedByMe ?? []).map((b: any) => b.blocked_id),
       ...(blockedMe ?? []).map((b: any) => b.blocker_id),
     ])
-
-    if (!error && data) setResults(data.filter((p) => !blocked.has(p.id)))
-    setLoading(false)
+    if (!error && data) setResults((data as Person[]).filter((p) => !blocked.has(p.id) && p.username))
+    setSearching(false)
   }
 
   function handleSearch(text: string) {
     setQuery(text)
     if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (requeteValide(text)) setSearching(true)
     debounceRef.current = setTimeout(() => doSearch(text), 350)
   }
 
-  async function sendRequest(friendId: string) {
-    const { data: existing } = await supabase
-      .from('friends')
-      .select('id')
-      .or(`and(user_id.eq.${myId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${myId})`)
-      .maybeSingle()
-
-    if (existing) {
-      Alert.alert('Déjà en relation', 'Une demande existe déjà avec cette personne')
-      setResults((prev) => prev.filter((r) => r.id !== friendId))
-      return
-    }
-
-    const { error } = await supabase.from('friends').insert({ user_id: myId, friend_id: friendId })
+  async function sendRequest(person: Person) {
+    setBusyId(person.id)
+    const { error } = await supabase.from('friends').insert({ user_id: myId, friend_id: person.id })
+    setBusyId(null)
     if (error) {
-      Alert.alert('Erreur', error.message)
+      showAlert(t("Impossible d'envoyer la demande"), error.code === '23505' ? t("Une demande existe déjà avec cette personne.") : error.message)
+      loadData()
       return
     }
-
-    setResults((prev) => prev.filter((r) => r.id !== friendId))
-    sendFriendRequestNotification(friendId)
+    sendFriendRequestNotification(person.id)
+    await loadData()
   }
 
   async function sendFriendRequestNotification(recipientId: string) {
@@ -152,114 +120,181 @@ export default function Friends() {
       // Notification silencieusement ignorée en cas d'échec réseau
     }
   }
-  
-  async function acceptRequest(requestId: string) {
-    await supabase.from('friends').update({ status: 'accepted' }).eq('id', requestId)
-    loadData()
+
+  async function acceptRequest(rel: Relation) {
+    setBusyId(rel.id)
+    await supabase.from('friends').update({ status: 'accepted' }).eq('id', rel.rowId)
+    await loadData()
+    setBusyId(null)
   }
 
-  async function declineRequest(requestId: string) {
-    await supabase.from('friends').delete().eq('id', requestId)
-    loadData()
+  async function deleteRow(rel: Relation) {
+    setBusyId(rel.id)
+    await supabase.from('friends').delete().eq('id', rel.rowId)
+    await loadData()
+    setBusyId(null)
   }
 
-  async function removeFriend(friendRowId: string) {
-    await supabase.from('friends').delete().eq('id', friendRowId)
-    setConfirmRemoveId(null)
-    loadData()
+  function confirmRemove(rel: Relation) {
+    confirmAction(t("Retirer @{username} de tes amis ?", { username: rel.username }), t("Vous ne verrez plus les dates partagés l'un de l'autre."), t("Retirer"), () => deleteRow(rel))
+  }
+
+  function inviteFriends() {
+    Share.share({ message: t("Rejoins-moi sur Dateo pour partager nos meilleurs dates ! Mon pseudo : @{username}", { username: myUsername }) })
+  }
+
+  function Avatar({ person }: { person: Person }) {
+    return person.avatar_url
+      ? <Image source={{ uri: person.avatar_url }} style={styles.avatar} />
+      : (
+        <View style={styles.avatarPlaceholder}>
+          <Text style={styles.avatarInitial}>{person.username.charAt(0).toUpperCase()}</Text>
+        </View>
+      )
+  }
+
+  function PersonRow({ person, children }: { person: Person; children?: ReactNode }) {
+    return (
+      <View style={styles.row}>
+        <TouchableOpacity style={styles.personTap} onPress={() => router.push(`/user/${person.id}`)} activeOpacity={0.7}>
+          <Avatar person={person} />
+          <Text style={styles.username} numberOfLines={1}>@{person.username}</Text>
+        </TouchableOpacity>
+        {busyId === person.id ? <ActivityIndicator color="#D4517E" /> : children}
+      </View>
+    )
+  }
+
+  const isSearching = requeteValide(query)
+
+  function renderSearchAction(person: Person) {
+    const status = statusOf(person.id)
+    if (status === 'friend') return <Text style={styles.statusText}>{t("✓ Ami")}</Text>
+    if (status === 'sent') return <Text style={styles.statusText}>{t("Demande envoyée")}</Text>
+    if (status === 'received') {
+      const rel = received.find((r) => r.id === person.id)!
+      return (
+        <TouchableOpacity style={styles.acceptButton} onPress={() => acceptRequest(rel)}>
+          <Text style={styles.acceptText}>{t("Accepter")}</Text>
+        </TouchableOpacity>
+      )
+    }
+    return (
+      <TouchableOpacity style={styles.addButton} onPress={() => sendRequest(person)}>
+        <Text style={styles.addText}>{t("Ajouter")}</Text>
+      </TouchableOpacity>
+    )
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScreenHeader title={t("Amis")} fallback="/(tabs)/profile" />
       <View style={[styles.container, webContentStyle]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.back}>‹ Retour</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Amis</Text>
-          <View style={{ width: 50 }} />
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={16} color="#B8A9A0" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t("Chercher un pseudo…")}
+            placeholderTextColor="#B8A9A0"
+            value={query}
+            onChangeText={handleSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searching ? <ActivityIndicator size="small" color="#D4517E" /> : query ? (
+            <TouchableOpacity onPress={() => handleSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Effacer")}>
+              <Ionicons name="close-circle" size={18} color="#B8A9A0" />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Chercher un pseudo..."
-          placeholderTextColor="#B8A9A0"
-          value={query}
-          onChangeText={handleSearch}
-          autoCapitalize="none"
-        />
-
-        {loading && <ActivityIndicator color="#D4517E" style={{ marginTop: 12 }} />}
-
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            <View>
-              {friends.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Mes amis ({friends.length})</Text>
-                  {friends.map((f) => (
-                    <View key={f.id} style={styles.row}>
-                      <Text style={styles.username}>{f.username}</Text>
-                      {confirmRemoveId === f.id ? (
+        {isSearching ? (
+          <FlatList
+            data={results}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
+            renderItem={({ item }) => <PersonRow person={item}>{renderSearchAction(item)}</PersonRow>}
+            ListEmptyComponent={!searching ? (
+              <View style={styles.emptyBox}>
+                <Text style={styles.empty}>{t("Aucun pseudo ne correspond à « {q} »", { q: query.trim() })}</Text>
+                <TouchableOpacity onPress={inviteFriends}>
+                  <Text style={styles.link}>{t("Inviter quelqu'un sur Dateo")}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          />
+        ) : (
+          <FlatList
+            data={friends}
+            keyExtractor={(item) => item.rowId}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 40 }}
+            ListHeaderComponent={
+              <View>
+                {received.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>{t("Demandes reçues")} ({received.length})</Text>
+                    {received.map((r) => (
+                      <PersonRow key={r.rowId} person={r}>
                         <View style={styles.actionButtons}>
-                          <TouchableOpacity style={styles.declineButton} onPress={() => removeFriend(f.id)}>
-                            <Text style={styles.declineText}>Confirmer</Text>
+                          <TouchableOpacity style={styles.acceptButton} onPress={() => acceptRequest(r)}>
+                            <Text style={styles.acceptText}>{t("Accepter")}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity style={styles.cancelButton} onPress={() => setConfirmRemoveId(null)}>
-                            <Text style={styles.cancelText}>Annuler</Text>
+                          <TouchableOpacity style={styles.declineButton} onPress={() => deleteRow(r)}>
+                            <Text style={styles.declineText}>{t("Refuser")}</Text>
                           </TouchableOpacity>
                         </View>
-                      ) : (
-                        <TouchableOpacity onPress={() => setConfirmRemoveId(f.id)}>
-                          <Text style={styles.removeText}>Retirer</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
+                      </PersonRow>
+                    ))}
+                  </View>
+                )}
 
-              {pending.length > 0 && (
+                {sent.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>{t("Demandes envoyées")}</Text>
+                    {sent.map((r) => (
+                      <PersonRow key={r.rowId} person={r}>
+                        <TouchableOpacity onPress={() => deleteRow(r)}>
+                          <Text style={styles.removeText}>{t("Annuler")}</Text>
+                        </TouchableOpacity>
+                      </PersonRow>
+                    ))}
+                  </View>
+                )}
+
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Demandes reçues</Text>
-                  {pending.map((p) => (
-                    <View key={p.id} style={styles.row}>
-                      <Text style={styles.username}>{p.username}</Text>
-                      <View style={styles.actionButtons}>
-                        <TouchableOpacity style={styles.acceptButton} onPress={() => acceptRequest(p.id)}>
-                          <Text style={styles.acceptText}>Accepter</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.declineButton} onPress={() => declineRequest(p.id)}>
-                          <Text style={styles.declineText}>Refuser</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
+                  <Text style={styles.sectionTitle}>{t("Mes amis")}{friends.length > 0 ? ` (${friends.length})` : ''}</Text>
                 </View>
-              )}
-
-              {query.length >= 2 && results.length > 0 && (
-                <Text style={styles.sectionTitle}>Résultats</Text>
-              )}
-            </View>
-          }
-          contentContainerStyle={{ paddingTop: 12 }}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <Text style={styles.username}>{item.username}</Text>
-              <TouchableOpacity style={styles.addButton} onPress={() => sendRequest(item.id)}>
-                <Text style={styles.addText}>Ajouter</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <PersonRow person={item}>
+                <TouchableOpacity onPress={() => confirmRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.removeText}>{t("Retirer")}</Text>
+                </TouchableOpacity>
+              </PersonRow>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyIcon}>👫</Text>
+                <Text style={styles.emptyTitle}>{t("Pas encore d'amis sur Dateo")}</Text>
+                <Text style={styles.empty}>{t("Cherche leur pseudo ci-dessus, ou invite-les à te rejoindre.")}</Text>
+                <TouchableOpacity style={styles.inviteButton} onPress={inviteFriends}>
+                  <Ionicons name="share-social-outline" size={16} color="#fff" />
+                  <Text style={styles.inviteText}>{t("Inviter des amis")}</Text>
+                </TouchableOpacity>
+              </View>
+            }
+            ListFooterComponent={friends.length > 0 ? (
+              <TouchableOpacity style={styles.inviteFooter} onPress={inviteFriends}>
+                <Ionicons name="share-social-outline" size={16} color="#D4517E" />
+                <Text style={styles.link}>{t("Inviter d'autres amis")}</Text>
               </TouchableOpacity>
-            </View>
-          )}
-          ListEmptyComponent={
-            query.length >= 2 && !loading ? (
-              <Text style={styles.empty}>Aucun résultat</Text>
-            ) : null
-          }
-        />
+            ) : null}
+          />
+        )}
       </View>
     </SafeAreaView>
   )
@@ -267,24 +302,32 @@ export default function Friends() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
-  container: { flex: 1, padding: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  back: { color: '#D4517E', fontSize: 15 },
-  title: { fontSize: 18, fontWeight: '600', color: '#5C4A45' },
-  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 15 },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#F0D9D9' },
+  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#5C4A45', minWidth: 0 },
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#5C4A45', marginBottom: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#F0D9D9' },
-  username: { fontSize: 15, color: '#5C4A45', fontWeight: '500' },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#B8A9A0', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0D9D9', minHeight: 56 },
+  personTap: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F0D9D9' },
+  avatarPlaceholder: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FDE8F0', justifyContent: 'center', alignItems: 'center' },
+  avatarInitial: { fontSize: 14, fontWeight: '700', color: '#D4517E' },
+  username: { fontSize: 15, color: '#5C4A45', fontWeight: '600', flexShrink: 1 },
   actionButtons: { flexDirection: 'row', gap: 8 },
-  addButton: { backgroundColor: '#D4517E', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
-  addText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  acceptButton: { backgroundColor: '#3B6D11', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
-  acceptText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  declineButton: { backgroundColor: '#F0D9D9', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
+  addButton: { backgroundColor: '#D4517E', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
+  addText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  acceptButton: { backgroundColor: '#3B6D11', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  acceptText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  declineButton: { backgroundColor: '#F0D9D9', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
   declineText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
-  cancelButton: { paddingVertical: 6, paddingHorizontal: 10 },
-  cancelText: { color: '#888', fontWeight: '500', fontSize: 13 },
-  removeText: { color: '#B8A9A0', fontSize: 13, fontWeight: '500' },
-  empty: { color: '#888', textAlign: 'center', marginTop: 20 },
+  statusText: { color: '#888', fontSize: 13, fontWeight: '500' },
+  removeText: { color: '#B8A9A0', fontSize: 13, fontWeight: '600' },
+  emptyBox: { alignItems: 'center', marginTop: 24, paddingHorizontal: 16 },
+  emptyIcon: { fontSize: 36, marginBottom: 8 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 4 },
+  empty: { color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  link: { color: '#D4517E', fontWeight: '600', fontSize: 14 },
+  inviteButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
+  inviteText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  inviteFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16 },
 })

@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { Session } from '@supabase/supabase-js'
-import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, useWindowDimensions } from 'react-native'
+import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { NotificationBell } from '../lib/NotificationBell'
 import { refreshUnreadNotifications, watchNotifications } from '../lib/notifications'
+import { loadProfileState } from '../lib/profileSetup'
+import { useBottomTabs } from '../lib/useBottomTabs'
+import { t, tKey, initLanguage, useLang } from '../lib/i18n'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -19,73 +22,17 @@ Notifications.setNotificationHandler({
 })
 
 const TABS = [
-  { name: 'feed', label: 'Feed', icon: 'people' as const },
-  { name: 'rate', label: 'Noter', icon: 'add-circle' as const },
-  { name: 'ideas', label: 'Idées', icon: 'bulb' as const },
-  { name: 'profile', label: 'Profil', icon: 'person' as const },
+  { name: 'feed', label: tKey("Feed"), icon: 'people' as const },
+  { name: 'rate', label: tKey("Noter"), icon: 'add-circle' as const },
+  { name: 'ideas', label: tKey("Idées"), icon: 'bulb' as const },
+  { name: 'profile', label: tKey("Profil"), icon: 'person' as const },
 ]
 
+// Barre de navigation du haut, utilisée seulement sur ordinateur. Sur téléphone
+// (natif ou web), la navigation se fait par la barre d'onglets en bas.
 function WebNavBar() {
   const router = useRouter()
   const pathname = usePathname()
-  const { width } = useWindowDimensions()
-  const compact = width < 600
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  function goTo(name: string) {
-    setMenuOpen(false)
-    router.replace(`/(tabs)/${name}` as any)
-  }
-
-  if (compact) {
-    return (
-      <View style={webStyles.compactWrap}>
-        <View style={[webStyles.nav, webStyles.navCompact]}>
-          <Image
-            source={require('../assets/logoHorizontal.png')}
-            style={{ height: 26, width: 69, maxWidth: '100%' }}
-            resizeMode="contain"
-          />
-          <View style={webStyles.compactActions}>
-            <NotificationBell style={webStyles.bellBtn} />
-            <TouchableOpacity
-              onPress={() => setMenuOpen((o) => !o)}
-              style={webStyles.burgerBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name={menuOpen ? 'close' : 'menu'} size={26} color="#D4517E" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        {menuOpen && (
-          <>
-            <TouchableOpacity
-              style={webStyles.menuBackdrop}
-              activeOpacity={1}
-              onPress={() => setMenuOpen(false)}
-            />
-            <View style={webStyles.mobileMenu}>
-              {TABS.map(tab => {
-                const active = pathname.endsWith(`/${tab.name}`)
-                return (
-                  <TouchableOpacity
-                    key={tab.name}
-                    onPress={() => goTo(tab.name)}
-                    style={[webStyles.mobileMenuItem, active && webStyles.mobileMenuItemActive]}
-                  >
-                    <Ionicons name={tab.icon} size={18} color={active ? '#D4517E' : '#888'} />
-                    <Text style={[webStyles.linkText, active && webStyles.linkTextActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                )
-              })}
-            </View>
-          </>
-        )}
-      </View>
-    )
-  }
 
   return (
     <View style={webStyles.nav}>
@@ -105,7 +52,7 @@ function WebNavBar() {
                 style={webStyles.link}
               >
                 <Text style={[webStyles.linkText, active && webStyles.linkTextActive]}>
-                  {tab.label}
+                  {t(tab.label)}
                 </Text>
                 {active && <View style={webStyles.linkUnderline} />}
               </TouchableOpacity>
@@ -146,22 +93,41 @@ async function registerPushToken() {
   }
 }
 
+// Routes accessibles sans être connecté, en plus de (auth)/* — ex: la page
+// d'instructions de suppression de compte, exigée par les stores même pour un
+// utilisateur qui ne peut pas/plus se connecter.
+const PUBLIC_ROUTES = ['delete-account-info', 'privacy', 'terms']
+
+// Écrans du groupe (auth) qui gèrent eux-mêmes leur navigation une fois connecté
+const SELF_NAVIGATING_AUTH_SCREENS = ['signup', 'username', 'reset-password']
+
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const segments = useSegments()
+  // Id de l'utilisateur dont le profil est complet (pseudo + CGU) : évite de
+  // re-interroger la base à chaque changement d'écran.
+  const profileReadyForRef = useRef<string | null>(null)
+  const bottomTabs = useBottomTabs()
+  // Changer de langue remonte la navigation (key) pour que tous les écrans se ré-affichent
+  const lang = useLang()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    Promise.all([supabase.auth.getSession(), initLanguage()]).then(([{ data: { session } }]) => {
       setSession(session)
       setLoading(false)
       if (session) registerPushToken()
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
-      if (session) registerPushToken()
+      if (!session) profileReadyForRef.current = null
+      if (event === 'PASSWORD_RECOVERY') {
+        router.replace('/(auth)/reset-password')
+        return
+      }
+      if (event === 'SIGNED_IN' && session) registerPushToken()
     })
 
     return () => listener.subscription.unsubscribe()
@@ -173,10 +139,15 @@ export default function RootLayout() {
     return watchNotifications(session.user.id)
   }, [session?.user.id])
 
-  // Routes accessibles sans être connecté, en plus de (auth)/* — ex: la page
-  // d'instructions de suppression de compte, exigée par les stores même pour un
-  // utilisateur qui ne peut pas/plus se connecter.
-  const PUBLIC_ROUTES = ['delete-account-info', 'privacy', 'terms']
+  // Mémorise la langue dans le profil pour que les notifications push (envoyées par
+  // les edge functions) arrivent dans la bonne langue. Erreur ignorée si la colonne
+  // n'existe pas encore (migration supabase/additions.sql pas encore passée).
+  useEffect(() => {
+    if (!session || loading) return
+    supabase.from('profiles').update({ langue: lang }).eq('id', session.user.id).then(() => {})
+  }, [session?.user.id, lang, loading])
+
+  const segmentKey = segments.join('/')
 
   useEffect(() => {
     if (loading) return
@@ -186,41 +157,34 @@ export default function RootLayout() {
     const isPublicRoute = PUBLIC_ROUTES.includes(segmentList[0])
     const screen = segmentList[1]
 
-    if (!session && !inAuthGroup && !isPublicRoute) {
-      router.replace('/(auth)/login')
+    if (!session) {
+      if (!inAuthGroup && !isPublicRoute) router.replace('/(auth)/login')
       return
     }
 
-    // Only auto-redirect from the login screen — signup/username handle their own navigation
-    if (session && screen === 'login') {
-      supabase.from('profiles')
-        .select('username')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.username) {
-            router.replace('/(tabs)/feed')
-          } else {
-            router.replace('/(auth)/username')
-          }
-        })
+    if (isPublicRoute || segmentList[0] === 'consent') return
+    if (inAuthGroup && SELF_NAVIGATING_AUTH_SCREENS.includes(screen)) return
+
+    const userId = session.user.id
+    if (profileReadyForRef.current === userId) {
+      if (inAuthGroup) router.replace('/(tabs)/feed')
+      return
     }
 
-    // Bloque l'accès au reste de l'app tant que les CGU n'ont pas été acceptées
-    // (ex: compte créé avant l'introduction de cet écran de consentement), mais laisse
-    // passer les pages qu'on doit justement pouvoir consulter depuis l'écran de consentement.
-    if (session && !inAuthGroup && segmentList[0] !== 'consent' && !isPublicRoute) {
-      supabase.from('profiles')
-        .select('terms_accepted_at')
-        .eq('id', session.user.id)
-        .single()
-        .then(({ data }) => {
-          if (data && !data.terms_accepted_at) {
-            router.replace('/consent')
-          }
-        })
-    }
-  }, [session, loading, segments])
+    // Pseudo manquant → écran pseudo ; CGU non acceptées (compte créé avant l'écran de
+    // consentement) → consentement ; sinon on laisse passer (et on quitte l'écran de login).
+    let cancelled = false
+    loadProfileState(session.user).then((state) => {
+      if (cancelled || !state) return
+      if (!state.username) router.replace('/(auth)/username')
+      else if (!state.termsAccepted) router.replace('/consent')
+      else {
+        profileReadyForRef.current = userId
+        if (inAuthGroup) router.replace('/(tabs)/feed')
+      }
+    })
+    return () => { cancelled = true }
+  }, [session, loading, segmentKey])
 
   if (loading) {
     return (
@@ -230,16 +194,19 @@ export default function RootLayout() {
     )
   }
 
+  // Pas de barre de navigation pendant l'inscription / l'onboarding / le consentement
+  const hideWebNav = ['(auth)', 'onboarding', 'consent'].includes(segments[0] as string)
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webRoot}>
-        {session && <WebNavBar />}
-        <Stack screenOptions={{ headerShown: false }} />
+        {session && !hideWebNav && !bottomTabs && <WebNavBar />}
+        <Stack key={lang} screenOptions={{ headerShown: false }} />
       </View>
     )
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />
+  return <Stack key={lang} screenOptions={{ headerShown: false }} />
 }
 
 const styles = StyleSheet.create({
@@ -262,46 +229,7 @@ const webStyles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
-  navCompact: {
-    paddingHorizontal: 16,
-  },
-  compactWrap: { position: 'relative', zIndex: 100 },
-  compactActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bellBtn: { padding: 4 },
-  burgerBtn: { padding: 4 },
-  menuBackdrop: {
-    position: 'absolute',
-    top: 60,
-    left: 0,
-    right: 0,
-    bottom: -2000,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
-  mobileMenu: {
-    position: 'absolute',
-    top: 60,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0D9D9',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  mobileMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  mobileMenuItemActive: { backgroundColor: '#FDE8F0' },
-  brand: { fontSize: 22, fontWeight: '700', color: '#D4517E', letterSpacing: -0.5 },
   rightGroup: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   links: { flexDirection: 'row' },
   link: { height: 60, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },

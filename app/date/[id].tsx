@@ -4,27 +4,22 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { formaterDate, formatNote } from '../../lib/dateUtils'
+import { formaterDate, formatNote, formaterIlYa } from '../../lib/dateUtils'
+import { ScreenHeader } from '../../lib/ScreenHeader'
+import { CRITERES } from '../../lib/criteres'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { getCategoryLabel } from '../../lib/categories'
+import { t } from '../../lib/i18n'
 
-const CRITERES = [
-  { key: 'mood', label: 'Mood' },
-  { key: 'nourriture', label: 'Nourriture' },
-  { key: 'ambiance', label: 'Ambiance' },
-  { key: 'personne', label: 'La personne' },
-  { key: 'conversation', label: 'Conversation' },
-  { key: 'prix', label: 'Prix / Valeur' },
-  { key: 'envie_recommencer', label: 'Envie de recommencer' },
-]
 
 type DateDetail = {
   id: string
   intitule: string | null
   lieu: string
   date_du_date: string
-  note_globale: number
+  note_globale: number | null
+  statut: string
   commentaire: string | null
   conseil_vivement: boolean
   user_id: string
@@ -160,6 +155,14 @@ export default function DateDetail() {
       await supabase.from('date_reactions').delete().eq('date_id', id).eq('user_id', userId)
     } else {
       await supabase.from('date_reactions').insert({ date_id: id, user_id: userId })
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session && detail && detail.user_id !== userId) {
+        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-reaction`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ date_id: id }),
+        })
+      }
     }
   }
 
@@ -168,7 +171,7 @@ export default function DateDetail() {
     const [{ data: dateData }, { data: ratingsData }, { data: participantsData }] = await Promise.all([
       supabase
         .from('dates')
-        .select('id, intitule, lieu, date_du_date, note_globale, commentaire, conseil_vivement, user_id, categorie, visibilite, profiles(username), date_photos(photo_url, ordre)')
+        .select('id, intitule, lieu, date_du_date, note_globale, statut, commentaire, conseil_vivement, user_id, categorie, visibilite, profiles(username), date_photos(photo_url, ordre)')
         .eq('id', dateId)
         .single(),
       supabase
@@ -190,10 +193,11 @@ export default function DateDetail() {
         lieu: dateData.lieu,
         date_du_date: dateData.date_du_date,
         note_globale: dateData.note_globale,
+        statut: (dateData as any).statut ?? 'vecu',
         commentaire: dateData.commentaire,
         conseil_vivement: dateData.conseil_vivement ?? false,
         user_id: dateData.user_id,
-        username: (dateData as any).profiles?.username ?? 'Quelqu\'un',
+        username: (dateData as any).profiles?.username ?? t("Quelqu'un"),
         categorie: (dateData as any).categorie ?? null,
         visibilite: (dateData as any).visibilite ?? 'friends',
         photos: ((dateData as any).date_photos ?? [])
@@ -234,7 +238,7 @@ export default function DateDetail() {
     setComments(data.map((c: any) => ({
       id: c.id,
       user_id: c.user_id,
-      username: profileMap[c.user_id]?.username ?? 'Quelqu\'un',
+      username: profileMap[c.user_id]?.username ?? t("Quelqu'un"),
       avatar_url: profileMap[c.user_id]?.avatar_url ?? null,
       content: c.content,
       created_at: c.created_at,
@@ -316,6 +320,8 @@ export default function DateDetail() {
             <TouchableOpacity
               onPress={() => setConfirmDeleteCommentId(c.id)}
               disabled={deletingCommentId === c.id}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={t("Supprimer le commentaire")}
             >
               <Text style={styles.commentDelete}>{deletingCommentId === c.id ? '...' : '×'}</Text>
             </TouchableOpacity>
@@ -332,16 +338,16 @@ export default function DateDetail() {
             }
           }}
         >
-          <Text style={styles.commentReplyBtn}>{replyingTo === c.id ? 'Annuler' : 'Répondre'}</Text>
+          <Text style={styles.commentReplyBtn}>{replyingTo === c.id ? t("Annuler") : t("Répondre")}</Text>
         </TouchableOpacity>
         {confirmDeleteCommentId === c.id && (
           <View style={styles.commentConfirmRow}>
-            <Text style={styles.commentConfirmText}>Supprimer ce commentaire ?</Text>
+            <Text style={styles.commentConfirmText}>{t("Supprimer ce commentaire ?")}</Text>
             <TouchableOpacity onPress={() => deleteComment(c.id)}>
-              <Text style={styles.commentConfirmYes}>Oui</Text>
+              <Text style={styles.commentConfirmYes}>{t("Oui")}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setConfirmDeleteCommentId(null)}>
-              <Text style={styles.commentConfirmNo}>Non</Text>
+              <Text style={styles.commentConfirmNo}>{t("Non")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -351,7 +357,7 @@ export default function DateDetail() {
               style={styles.replyInput}
               value={replyText}
               onChangeText={setReplyText}
-              placeholder={`Répondre à @${c.username}...`}
+              placeholder={t("Répondre à @{username}...", { username: c.username })}
               placeholderTextColor="#B8A9A0"
               multiline
               maxLength={500}
@@ -362,7 +368,7 @@ export default function DateDetail() {
               onPress={() => sendComment(replyText, c.id)}
               disabled={sendingReply || !replyText.trim()}
             >
-              <Text style={styles.commentSendText}>{sendingReply ? '...' : '↑'}</Text>
+              {sendingReply ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-up" size={18} color="#fff" />}
             </TouchableOpacity>
           </View>
         )}
@@ -378,7 +384,7 @@ export default function DateDetail() {
     let userId = myIdRef.current
     if (!userId) {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setCommentError('Non connecté'); return }
+      if (!user) { setCommentError(t("Non connecté")); return }
       userId = user.id
       setMyId(userId)
       myIdRef.current = userId
@@ -396,7 +402,7 @@ export default function DateDetail() {
     else setSendingComment(false)
 
     if (error) {
-      setCommentError(`Erreur : ${error.message}`)
+      setCommentError(t("Ton commentaire n'a pas pu être envoyé. Réessaie."))
       return
     }
 
@@ -433,7 +439,8 @@ export default function DateDetail() {
   async function handleShare() {
     if (!detail) return
     const title = detail.intitule ?? detail.lieu
-    const text = `${title} — ${detail.note_globale}/20 sur Dateo ✨\n📍 ${detail.lieu} · ${formaterDate(detail.date_du_date)}`
+    const note = detail.note_globale != null ? ` — ${formatNote(detail.note_globale)}/20` : ''
+    const text = `${title}${note} ${t("sur Dateo ✨")}\n📍 ${detail.lieu} · ${formaterDate(detail.date_du_date)}`
     await Share.share({ message: text, title: 'Dateo' })
   }
 
@@ -447,40 +454,37 @@ export default function DateDetail() {
     )
   }
 
-  function formatCommentTime(iso: string) {
-    const d = new Date(iso)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-    if (diff < 60) return 'à l\'instant'
-    if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`
-    if (diff < 86400) return `il y a ${Math.floor(diff / 3600)} h`
-    return formaterDate(d.toISOString().slice(0, 10))
-  }
+  const formatCommentTime = formaterIlYa
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        {detail && (
-          <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
-            <Text style={styles.shareText}>Partager</Text>
+      <ScreenHeader
+        fallback="/(tabs)/feed"
+        bordered={false}
+        right={detail ? (
+          <TouchableOpacity onPress={handleShare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={t("Partager")}>
+            <Ionicons name="share-outline" size={22} color="#D4517E" />
           </TouchableOpacity>
-        )}
-      </View>
+        ) : null}
+      />
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
       ) : !detail ? (
-        <Text style={styles.error}>Date introuvable</Text>
+        <View style={styles.notFound}>
+          <Text style={styles.notFoundIcon}>🔍</Text>
+          <Text style={styles.notFoundTitle}>{t("Date introuvable")}</Text>
+          <Text style={styles.notFoundSub}>{t("Il a peut-être été supprimé, ou il n'est plus visible pour toi.")}</Text>
+          <TouchableOpacity style={styles.notFoundBtn} onPress={() => router.replace('/(tabs)/feed')}>
+            <Text style={styles.notFoundBtnText}>{t("Retour au feed")}</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
           <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, webContentStyle]}>
             {detail.conseil_vivement && (
               <View style={styles.conseilBanner}>
-                <Text style={styles.conseilBannerText}>💖 Conseillé vivement</Text>
+                <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
               </View>
             )}
 
@@ -523,13 +527,13 @@ export default function DateDetail() {
                 style={styles.mapBtn}
               >
                 <Ionicons name="map-outline" size={14} color="#D4517E" />
-                <Text style={styles.mapBtnText}>Carte</Text>
+                <Text style={styles.mapBtnText}>{t("Carte")}</Text>
               </TouchableOpacity>
             </View>
 
             {detail.participants.length > 0 && (
               <View style={styles.participantsRow}>
-                <Text style={styles.participantsLabel}>👥 Avec</Text>
+                <Text style={styles.participantsLabel}>{t("👥 Avec")}</Text>
                 {detail.participants.map((p, idx) => (
                   <TouchableOpacity
                     key={p.id}
@@ -543,22 +547,54 @@ export default function DateDetail() {
               </View>
             )}
 
-            <View style={styles.noteGlobaleBox}>
-              <Text style={styles.noteGlobaleLabel}>Note globale</Text>
-              <Text style={styles.noteGlobaleValue}>{detail.note_globale}<Text style={styles.noteGlobaleSuffix}>/20</Text></Text>
-              {renderBar(detail.note_globale, 20)}
-            </View>
+            {detail.statut === 'planifie' || detail.note_globale == null ? (
+              <View style={styles.planifieBox}>
+                <Text style={styles.planifieTitle}>{t("📅 Date à venir")}</Text>
+                <Text style={styles.planifieSub}>
+                  {detail.user_id === myId ? t("Tu pourras le noter une fois passé.") : t("Pas encore noté.")}
+                </Text>
+                {detail.user_id === myId && (
+                  <TouchableOpacity
+                    style={styles.planifieBtn}
+                    onPress={() => router.push({ pathname: '/(tabs)/rate', params: { planifieId: detail.id } } as any)}
+                  >
+                    <Text style={styles.planifieBtnText}>{t("Noter ce date")}</Text>
+                  </TouchableOpacity>
+                )}
+                {detail.user_id === myId && (
+                  <TouchableOpacity
+                    style={styles.planifieLink}
+                    onPress={() => router.push({
+                      pathname: '/conversation',
+                      params: {
+                        contexte: [detail.intitule, detail.lieu].filter(Boolean).join(' — '),
+                        ...(partnerId && detail.participants.some((p) => p.id === partnerId) ? { stage: 'couple' } : {}),
+                      },
+                    } as any)}
+                  >
+                    <Ionicons name="chatbubbles-outline" size={15} color="#D4517E" />
+                    <Text style={styles.planifieLinkText}>{t("Préparer des sujets de conversation")}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={styles.noteGlobaleBox}>
+                <Text style={styles.noteGlobaleLabel}>{t("Note globale")}</Text>
+                <Text style={styles.noteGlobaleValue}>{formatNote(detail.note_globale)}<Text style={styles.noteGlobaleSuffix}>/20</Text></Text>
+                {renderBar(detail.note_globale, 20)}
+              </View>
+            )}
 
             {/* Note du partenaire (uniquement si j'ai participé à ce date précis) */}
             {detail.user_id !== myId && partnerId && detail.user_id === partnerId && detail.participants.some((p) => p.id === myId) && (
               <View style={styles.partnerRatingBox}>
-                <Text style={styles.partnerRatingTitle}>Mon avis sur ce date</Text>
+                <Text style={styles.partnerRatingTitle}>{t("Mon avis sur ce date")}</Text>
                 {myPartnerNote && !editingPartnerNote ? (
                   <>
-                    <Text style={styles.partnerNoteValue}>{myPartnerNote.note_globale}/20</Text>
+                    <Text style={styles.partnerNoteValue}>{formatNote(myPartnerNote.note_globale)}/20</Text>
                     {myPartnerNote.commentaire ? <Text style={styles.partnerNoteComment}>{myPartnerNote.commentaire}</Text> : null}
                     <TouchableOpacity onPress={() => setEditingPartnerNote(true)} style={styles.partnerEditBtn}>
-                      <Text style={styles.partnerEditBtnText}>Modifier</Text>
+                      <Text style={styles.partnerEditBtnText}>{t("Modifier")}</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
@@ -578,18 +614,18 @@ export default function DateDetail() {
                       style={styles.partnerCommentInput}
                       value={partnerCommentInput}
                       onChangeText={setPartnerCommentInput}
-                      placeholder="Mon commentaire (optionnel)..."
+                      placeholder={t("Mon commentaire (optionnel)...")}
                       placeholderTextColor="#B8A9A0"
                       multiline
                     />
                     <View style={styles.partnerBtnRow}>
                       {editingPartnerNote && (
                         <TouchableOpacity onPress={() => setEditingPartnerNote(false)} style={styles.partnerCancelBtn}>
-                          <Text style={styles.partnerCancelBtnText}>Annuler</Text>
+                          <Text style={styles.partnerCancelBtnText}>{t("Annuler")}</Text>
                         </TouchableOpacity>
                       )}
                       <TouchableOpacity onPress={savePartnerNote} disabled={savingPartnerNote} style={styles.partnerSaveBtn}>
-                        <Text style={styles.partnerSaveBtnText}>{savingPartnerNote ? '...' : myPartnerNote ? 'Modifier' : 'Enregistrer'}</Text>
+                        <Text style={styles.partnerSaveBtnText}>{savingPartnerNote ? '...' : myPartnerNote ? t("Modifier") : t("Enregistrer")}</Text>
                       </TouchableOpacity>
                     </View>
                   </>
@@ -600,8 +636,8 @@ export default function DateDetail() {
             {/* Note de mon partenaire sur mon propre date */}
             {detail.user_id === myId && partnerRating && (
               <View style={styles.partnerRatingBox}>
-                <Text style={styles.partnerRatingTitle}>Note de @{partnerRating.username}</Text>
-                <Text style={styles.partnerNoteValue}>{partnerRating.note_globale}/20</Text>
+                <Text style={styles.partnerRatingTitle}>{t("Note de @{username}", { username: partnerRating.username })}</Text>
+                <Text style={styles.partnerNoteValue}>{formatNote(partnerRating.note_globale)}/20</Text>
                 {partnerRating.commentaire && <Text style={styles.partnerNoteComment}>{partnerRating.commentaire}</Text>}
               </View>
             )}
@@ -618,20 +654,20 @@ export default function DateDetail() {
 
             {detail.commentaire ? (
               <View style={styles.commentBox}>
-                <Text style={styles.commentLabel}>Commentaire</Text>
+                <Text style={styles.commentLabel}>{t("Commentaire")}</Text>
                 <Text style={styles.comment}>{detail.commentaire}</Text>
               </View>
             ) : null}
 
-            {detail.ratings && (
+            {detail.ratings && detail.statut !== 'planifie' && (
               <View style={styles.ratingsSection}>
-                <Text style={styles.ratingsTitle}>Détails</Text>
+                <Text style={styles.ratingsTitle}>{t("Détails")}</Text>
                 {CRITERES.map((c) => {
                   const val = detail.ratings![c.key] ?? 0
                   return (
                     <View key={c.key} style={styles.critereRow}>
                       <View style={styles.critereLeft}>
-                        <Text style={styles.critereLabel}>{c.label}</Text>
+                        <Text style={styles.critereLabel}>{t(c.label)}</Text>
                         {renderBar(val, 5)}
                       </View>
                       <Text style={styles.critereValue}>{formatNote(val)}/5</Text>
@@ -651,18 +687,18 @@ export default function DateDetail() {
                 />
               </Animated.View>
               <Text style={[styles.likesCount, myReaction && styles.likesCountActive]}>
-                {reactionCount > 0 ? reactionCount : ''} {reactionCount === 1 ? 'j\'aime' : reactionCount > 1 ? 'j\'aimes' : 'Aimer'}
+                {reactionCount > 0 ? t("{n} j'aime", { n: reactionCount }) : t("J'aime")}
               </Text>
             </TouchableOpacity>
 
             {/* Commentaires */}
             <View style={styles.commentsSection}>
               <Text style={styles.commentsTitle}>
-                Commentaires {comments.length > 0 ? `(${comments.length})` : ''}
+                {t("Commentaires")} {comments.length > 0 ? `(${comments.length})` : ''}
               </Text>
 
               {comments.length === 0 && (
-                <Text style={styles.commentsEmpty}>Aucun commentaire pour l'instant</Text>
+                <Text style={styles.commentsEmpty}>{t("Aucun commentaire pour l'instant. Lance la conversation !")}</Text>
               )}
 
               {comments.filter((c) => !c.parent_id).map((c) => (
@@ -693,7 +729,7 @@ export default function DateDetail() {
                     style={styles.commentInput}
                     value={commentText}
                     onChangeText={handleCommentTextChange}
-                    placeholder="Ajoute un commentaire... (@ pour mentionner)"
+                    placeholder={t("Ajoute un commentaire... (@ pour mentionner)")}
                     placeholderTextColor="#B8A9A0"
                     multiline
                     maxLength={500}
@@ -703,7 +739,7 @@ export default function DateDetail() {
                     onPress={() => sendComment()}
                     disabled={sendingComment || !commentText.trim()}
                   >
-                    <Text style={styles.commentSendText}>{sendingComment ? '...' : '↑'}</Text>
+                    {sendingComment ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-up" size={18} color="#fff" />}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -729,6 +765,19 @@ export default function DateDetail() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  notFound: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
+  notFoundIcon: { fontSize: 40, marginBottom: 12 },
+  notFoundTitle: { fontSize: 17, fontWeight: '700', color: '#5C4A45' },
+  notFoundSub: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 6, marginBottom: 20, lineHeight: 20 },
+  notFoundBtn: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  notFoundBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  planifieBox: { backgroundColor: '#FDE8F0', borderRadius: 16, padding: 16, marginBottom: 20, alignItems: 'center' },
+  planifieTitle: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
+  planifieSub: { fontSize: 13, color: '#5C4A45', marginTop: 4 },
+  planifieBtn: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 20, marginTop: 12 },
+  planifieBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  planifieLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, padding: 4 },
+  planifieLinkText: { color: '#D4517E', fontWeight: '600', fontSize: 13 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
   backBtn: { flexDirection: 'row', alignItems: 'center' },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

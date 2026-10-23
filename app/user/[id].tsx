@@ -4,16 +4,20 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { formaterDate } from '../../lib/dateUtils'
+import { formaterDate, formatNote } from '../../lib/dateUtils'
+import { ScreenHeader } from '../../lib/ScreenHeader'
+import { confirmAction, showAlert } from '../../lib/alert'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
+import { t, tn, tKey } from '../../lib/i18n'
 
+// Enregistrées en français en base (pour la modération), affichées traduites
 const REPORT_REASONS = [
-  'Harcèlement ou comportement abusif',
-  'Contenu inapproprié',
-  'Spam ou faux compte',
-  'Usurpation d\'identité',
-  'Autre',
+  tKey("Harcèlement ou comportement abusif"),
+  tKey("Contenu inapproprié"),
+  tKey("Spam ou faux compte"),
+  tKey("Usurpation d'identité"),
+  tKey("Autre"),
 ]
 
 type DateRow = {
@@ -43,6 +47,9 @@ export default function UserProfile() {
   const [blockSaving, setBlockSaving] = useState(false)
   const [reportSaving, setReportSaving] = useState(false)
   const [reportSent, setReportSent] = useState(false)
+  // Relation d'amitié avec ce profil : aucune, demande envoyée/reçue, amis
+  const [friendship, setFriendship] = useState<{ id: string; status: string; sentByMe: boolean } | null>(null)
+  const [friendSaving, setFriendSaving] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -53,8 +60,56 @@ export default function UserProfile() {
       setMyId(user.id)
       supabase.from('user_blocks').select('id').eq('blocker_id', user.id).eq('blocked_id', id).maybeSingle()
         .then(({ data }) => setIsBlocked(!!data))
+      loadFriendship(user.id, id)
     })
   }, [id])
+
+  async function loadFriendship(me: string, other: string) {
+    const { data } = await supabase
+      .from('friends')
+      .select('id, user_id, status')
+      .or(`and(user_id.eq.${me},friend_id.eq.${other}),and(user_id.eq.${other},friend_id.eq.${me})`)
+      .limit(1)
+    const row = (data ?? [])[0] as any
+    setFriendship(row ? { id: row.id, status: row.status, sentByMe: row.user_id === me } : null)
+  }
+
+  async function handleFriendAction() {
+    if (!myId || !id || friendSaving) return
+    setFriendSaving(true)
+    if (!friendship) {
+      const { error } = await supabase.from('friends').insert({ user_id: myId, friend_id: id })
+      if (error) showAlert(t("Impossible d'envoyer la demande"), error.message)
+      else {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-social`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ recipient_id: id, type: 'friend_request' }),
+          }).catch(() => {})
+        }
+      }
+    } else if (friendship.status === 'pending' && !friendship.sentByMe) {
+      await supabase.from('friends').update({ status: 'accepted' }).eq('id', friendship.id)
+    } else if (friendship.status === 'pending' && friendship.sentByMe) {
+      await supabase.from('friends').delete().eq('id', friendship.id)
+    }
+    await loadFriendship(myId, id)
+    setFriendSaving(false)
+    loadProfile(id)
+  }
+
+  function confirmToggleBlock() {
+    setMenuOpen(false)
+    if (isBlocked) { toggleBlock(); return }
+    confirmAction(
+      t("Bloquer @{username} ?", { username }),
+      t("Vous ne verrez plus les dates l'un de l'autre et votre amitié sera retirée. Tu pourras le/la débloquer plus tard."),
+      t("Bloquer"),
+      toggleBlock,
+    )
+  }
 
   async function toggleBlock() {
     if (!myId || !id || blockSaving) return
@@ -70,6 +125,7 @@ export default function UserProfile() {
         `and(user_id.eq.${myId},friend_id.eq.${id}),and(user_id.eq.${id},friend_id.eq.${myId})`
       )
       setIsBlocked(true)
+      setFriendship(null)
     }
     setBlockSaving(false)
   }
@@ -97,6 +153,7 @@ export default function UserProfile() {
         .from('dates')
         .select('id, intitule, lieu, date_du_date, note_globale, commentaire, conseil_vivement, date_photos(photo_url, ordre)')
         .eq('user_id', userId)
+        .eq('statut', 'vecu')
         .order('date_du_date', { ascending: false })
         .order('created_at', { ascending: false }),
     ])
@@ -136,35 +193,35 @@ export default function UserProfile() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-          <TouchableOpacity onPress={() => Share.share({ message: `Regarde le profil de @${username} sur Dateo !` })} style={styles.shareBtn}>
-            <Ionicons name="share-outline" size={22} color="#D4517E" />
-          </TouchableOpacity>
-          {myId && myId !== id && (
-            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.shareBtn}>
-              <Ionicons name="ellipsis-horizontal" size={22} color="#D4517E" />
+      <ScreenHeader
+        fallback="/(tabs)/feed"
+        bordered={false}
+        right={
+          <>
+            <TouchableOpacity onPress={() => Share.share({ message: t("Regarde le profil de @{username} sur Dateo !", { username }) })} style={styles.shareBtn} accessibilityLabel={t("Partager le profil")}>
+              <Ionicons name="share-outline" size={22} color="#D4517E" />
             </TouchableOpacity>
-          )}
-        </View>
-      </View>
+            {myId && myId !== id ? (
+              <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.shareBtn} accessibilityLabel={t("Plus d'options")}>
+                <Ionicons name="ellipsis-horizontal" size={22} color="#D4517E" />
+              </TouchableOpacity>
+            ) : null}
+          </>
+        }
+      />
 
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuCard}>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setReportOpen(true) }}>
               <Ionicons name="flag-outline" size={18} color="#5C4A45" />
-              <Text style={styles.menuItemText}>Signaler ce profil</Text>
+              <Text style={styles.menuItemText}>{t("Signaler ce profil")}</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={toggleBlock} disabled={blockSaving}>
+            <TouchableOpacity style={styles.menuItem} onPress={confirmToggleBlock} disabled={blockSaving}>
               <Ionicons name={isBlocked ? 'lock-open-outline' : 'ban-outline'} size={18} color="#D85A30" />
               <Text style={[styles.menuItemText, { color: '#D85A30' }]}>
-                {blockSaving ? '...' : isBlocked ? 'Débloquer' : 'Bloquer cet utilisateur'}
+                {blockSaving ? '...' : isBlocked ? t("Débloquer") : t("Bloquer cet utilisateur")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -175,13 +232,13 @@ export default function UserProfile() {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setReportOpen(false)}>
           <View style={styles.menuCard}>
             {reportSent ? (
-              <Text style={styles.reportSentText}>Signalement envoyé, merci.</Text>
+              <Text style={styles.reportSentText}>{t("Signalement envoyé, merci.")}</Text>
             ) : (
               <>
-                <Text style={styles.reportTitle}>Pourquoi signaler @{username} ?</Text>
+                <Text style={styles.reportTitle}>{t("Pourquoi signaler @{username} ?", { username })}</Text>
                 {REPORT_REASONS.map((reason) => (
                   <TouchableOpacity key={reason} style={styles.menuItem} onPress={() => submitReport(reason)} disabled={reportSaving}>
-                    <Text style={styles.menuItemText}>{reason}</Text>
+                    <Text style={styles.menuItemText}>{t(reason)}</Text>
                   </TouchableOpacity>
                 ))}
               </>
@@ -194,8 +251,8 @@ export default function UserProfile() {
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
       ) : profileNotFound ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Profil introuvable</Text>
-          <Text style={styles.emptySubtext}>Ce profil n'existe plus ou n'est pas accessible</Text>
+          <Text style={styles.emptyText}>{t("Profil introuvable")}</Text>
+          <Text style={styles.emptySubtext}>{t("Ce profil n'existe plus ou n'est pas accessible")}</Text>
         </View>
       ) : (
         <FlatList
@@ -214,25 +271,50 @@ export default function UserProfile() {
                     <Text style={styles.profileAvatarInitial}>{username.charAt(0).toUpperCase()}</Text>
                   </View>
                 )}
+                <View style={{ flex: 1, alignItems: 'flex-start' }}>
                 <Text style={styles.username}>@{username}</Text>
+                {myId && myId !== id && !isBlocked && friendship?.status !== 'accepted' && (
+                  <TouchableOpacity
+                    style={[styles.friendBtn, friendship && styles.friendBtnPending]}
+                    onPress={handleFriendAction}
+                    disabled={friendSaving}
+                  >
+                    {friendSaving ? <ActivityIndicator size="small" color={friendship ? '#D4517E' : '#fff'} /> : (
+                      <Text style={[styles.friendBtnText, friendship && styles.friendBtnTextPending]}>
+                        {!friendship ? t("+ Ajouter en ami") : friendship.sentByMe ? t("Demande envoyée · Annuler") : t("Accepter sa demande")}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {friendship?.status === 'accepted' && <Text style={styles.friendTag}>{t("✓ Vous êtes amis")}</Text>}
+                </View>
               </View>
+
+              {isBlocked && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>{t("Tu as bloqué ce profil.")}</Text>
+                  <TouchableOpacity onPress={toggleBlock}>
+                    <Text style={styles.errorBannerRetry}>{t("Débloquer")}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {dates.length > 0 && (
                 <View style={styles.statsRow}>
                   <View style={styles.stat}>
                     <Text style={styles.statValue}>{dates.length}</Text>
-                    <Text style={styles.statLabel}>dates</Text>
+                    <Text style={styles.statLabel}>{t("dates")}</Text>
                   </View>
                   {moyenne && (
                     <View style={styles.stat}>
                       <Text style={styles.statValue}>{moyenne}</Text>
-                      <Text style={styles.statLabel}>moyenne</Text>
+                      <Text style={styles.statLabel}>{t("moyenne")}</Text>
                     </View>
                   )}
                   {meilleurLieu && (
                     <View style={[styles.stat, { flex: 2 }]}>
                       <Text style={styles.statValue} numberOfLines={1}>{meilleurLieu}</Text>
-                      <Text style={styles.statLabel}>meilleur lieu</Text>
+                      <Text style={styles.statLabel}>{t("meilleur lieu")}</Text>
                     </View>
                   )}
                 </View>
@@ -240,21 +322,25 @@ export default function UserProfile() {
 
               {datesLoadError && (
                 <View style={styles.errorBanner}>
-                  <Text style={styles.errorBannerText}>Impossible de charger les dates. Vérifie ta connexion.</Text>
+                  <Text style={styles.errorBannerText}>{t("Impossible de charger les dates. Vérifie ta connexion.")}</Text>
                   <TouchableOpacity onPress={() => id && loadProfile(id)}>
-                    <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                    <Text style={styles.errorBannerRetry}>{t("Réessayer")}</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
-              <Text style={styles.sectionTitle}>{dates.length} date{dates.length !== 1 ? 's' : ''}</Text>
+              <Text style={styles.sectionTitle}>{tn(dates.length, "{n} date", "{n} dates")}</Text>
             </View>
           }
           ListEmptyComponent={
             datesLoadError ? null : (
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>Aucun date visible</Text>
-                <Text style={styles.emptySubtext}>Cette personne n'a pas encore noté de dates ou ils ne sont pas visibles pour toi</Text>
+                <Text style={styles.emptyText}>{t("Aucun date visible")}</Text>
+                <Text style={styles.emptySubtext}>
+                  {friendship?.status === 'accepted'
+                    ? t("Cette personne n'a pas encore partagé de date.")
+                    : t("Ajoute cette personne en ami pour voir les dates qu'elle partage.")}
+                </Text>
               </View>
             )
           }
@@ -266,7 +352,7 @@ export default function UserProfile() {
             >
               {item.conseil_vivement && (
                 <View style={styles.conseilBanner}>
-                  <Text style={styles.conseilBannerText}>💖 Conseillé vivement</Text>
+                  <Text style={styles.conseilBannerText}>{t("💖 Conseillé vivement")}</Text>
                 </View>
               )}
               <View style={styles.cardHeader}>
@@ -280,7 +366,7 @@ export default function UserProfile() {
                     <Text style={styles.lieu}>{item.lieu}</Text>
                   )}
                 </View>
-                <Text style={styles.note}>{item.note_globale}/20</Text>
+                <Text style={styles.note}>{formatNote(item.note_globale)}/20</Text>
               </View>
               <Text style={styles.date}>{formaterDate(item.date_du_date)}</Text>
 
@@ -316,6 +402,11 @@ export default function UserProfile() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  friendBtn: { backgroundColor: '#D4517E', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 18, marginTop: 10, minHeight: 36, justifyContent: 'center' },
+  friendBtnPending: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#D4517E' },
+  friendBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  friendBtnTextPending: { color: '#D4517E' },
+  friendTag: { marginTop: 8, fontSize: 13, color: '#3B6D11', fontWeight: '600' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
   backBtn: { flexDirection: 'row', alignItems: 'center' },
   shareBtn: { padding: 4 },

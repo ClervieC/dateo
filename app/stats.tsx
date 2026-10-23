@@ -6,19 +6,27 @@ import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { CATEGORIES } from '../lib/categories'
+import { nomsDesJours, nomsDesMois } from '../lib/dateUtils'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t, tn } from '../lib/i18n'
 
 type DateRow = { lieu: string; note_globale: number; date_du_date: string; categorie: string | null }
 
-const JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
-const MOIS_COURTS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 
+// Bornes demi-ouvertes [min, max[ : les notes sont au quart de point (ex : 9.5),
+// des bornes entières en laissaient passer certaines entre deux tranches.
 const NOTE_BINS = [
-  { label: '0–9', min: 0, max: 9, color: '#F0D9D9' },
-  { label: '10–12', min: 10, max: 12, color: '#F4C0D1' },
-  { label: '13–15', min: 13, max: 15, color: '#D4517E' },
-  { label: '16–18', min: 16, max: 18, color: '#B03060' },
-  { label: '19–20', min: 19, max: 20, color: '#7A1040' },
+  { label: '< 10', min: 0, max: 10, color: '#F0D9D9' },
+  { label: '10–12', min: 10, max: 13, color: '#F4C0D1' },
+  { label: '13–15', min: 13, max: 16, color: '#D4517E' },
+  { label: '16–18', min: 16, max: 19, color: '#B03060' },
+  { label: '19–20', min: 19, max: 20.01, color: '#7A1040' },
 ]
+
+function weekKey(d: Date) {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+}
 
 function openMaps(lieu: string) {
   const q = encodeURIComponent(lieu)
@@ -29,6 +37,9 @@ function openMaps(lieu: string) {
 export default function Stats() {
   const [dates, setDates] = useState<DateRow[]>([])
   const [loading, setLoading] = useState(true)
+  const JOURS = nomsDesJours('court')
+  const JOURS_LONGS = nomsDesJours('long')
+  const MOIS_COURTS = nomsDesMois('court')
   const router = useRouter()
 
   useEffect(() => {
@@ -91,26 +102,21 @@ export default function Stats() {
     moisData.push({ label: MOIS_COURTS[d.getMonth()], moy, count: datesInMonth.length })
   }
 
-  // Streak (semaines consécutives)
+  // Série de semaines consécutives avec au moins un date (en heure locale). La semaine
+  // en cours ne casse pas la série tant qu'elle n'est pas terminée.
   let streak = 0
-  const weekSet = new Set(dates.map((d) => {
-    const dt = new Date(d.date_du_date + 'T12:00:00')
-    const startOfWeek = new Date(dt)
-    startOfWeek.setDate(dt.getDate() - dt.getDay())
-    return startOfWeek.toISOString().slice(0, 10)
-  }))
+  const weekSet = new Set(dates.map((d) => weekKey(new Date(d.date_du_date + 'T12:00:00'))))
   const checkDate = new Date()
-  while (true) {
-    checkDate.setDate(checkDate.getDate() - checkDate.getDay())
-    const key = checkDate.toISOString().slice(0, 10)
-    if (weekSet.has(key)) { streak++; checkDate.setDate(checkDate.getDate() - 7) }
-    else break
+  if (!weekSet.has(weekKey(checkDate))) checkDate.setDate(checkDate.getDate() - 7)
+  while (weekSet.has(weekKey(checkDate))) {
+    streak++
+    checkDate.setDate(checkDate.getDate() - 7)
   }
 
   // Distribution des notes (histogram)
   const binCounts = NOTE_BINS.map((bin) => ({
     ...bin,
-    count: dates.filter((d) => d.note_globale >= bin.min && d.note_globale <= bin.max).length,
+    count: dates.filter((d) => d.note_globale >= bin.min && d.note_globale < bin.max).length,
   }))
   const maxBinCount = Math.max(...binCounts.map((b) => b.count), 1)
 
@@ -133,18 +139,14 @@ export default function Stats() {
   if (dates.length === 0) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={20} color="#D4517E" />
-            <Text style={styles.back}>Retour</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Statistiques</Text>
-          <View style={{ width: 60 }} />
-        </View>
+        <ScreenHeader fallback="/(tabs)/profile" title={t("Statistiques")} />
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>📊</Text>
-          <Text style={styles.emptyText}>Pas encore de stats</Text>
-          <Text style={styles.emptySubtext}>Note quelques dates pour voir tes statistiques ici</Text>
+          <Text style={styles.emptyText}>{t("Pas encore de stats")}</Text>
+          <Text style={styles.emptySubtext}>{t("Note quelques dates pour voir tes statistiques ici")}</Text>
+          <TouchableOpacity style={styles.emptyCta} onPress={() => router.replace('/(tabs)/rate')}>
+            <Text style={styles.emptyCtaText}>{t("Noter un date")}</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     )
@@ -152,14 +154,7 @@ export default function Stats() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Statistiques</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Statistiques")} />
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
 
@@ -167,21 +162,21 @@ export default function Stats() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{dates.length}</Text>
-            <Text style={styles.summaryLabel}>dates vécus</Text>
+            <Text style={styles.summaryLabel}>{t("dates vécus")}</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{moyenne.toFixed(1)}</Text>
-            <Text style={styles.summaryLabel}>moyenne /20</Text>
+            <Text style={styles.summaryLabel}>{t("moyenne /20")}</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{streak}</Text>
-            <Text style={styles.summaryLabel}>semaines streak</Text>
+            <Text style={styles.summaryLabel}>{tn(streak, "semaine d'affilée", "semaines d'affilée")}</Text>
           </View>
         </View>
 
         {/* Évolution mensuelle */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Évolution (6 mois)</Text>
+          <Text style={styles.sectionTitle}>{t("Évolution (6 mois)")}</Text>
           <View style={styles.barChart}>
             {moisData.map((m, i) => (
               <View key={i} style={styles.barCol}>
@@ -199,7 +194,7 @@ export default function Stats() {
 
         {/* Distribution des notes */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Distribution des notes</Text>
+          <Text style={styles.sectionTitle}>{t("Distribution des notes")}</Text>
           {binCounts.map((bin) => (
             <View key={bin.label} style={styles.histoRow}>
               <Text style={styles.histoLabel}>{bin.label}</Text>
@@ -215,12 +210,12 @@ export default function Stats() {
         {/* Catégories */}
         {catEntries.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Par catégorie</Text>
+            <Text style={styles.sectionTitle}>{t("Par catégorie")}</Text>
             {catEntries.map(([key, count]) => {
               const cat = CATEGORIES.find((c) => c.key === key)
               return (
                 <View key={key} style={styles.histoRow}>
-                  <Text style={styles.histoLabel}>{cat?.emoji ?? ''} {cat?.label ?? key}</Text>
+                  <Text style={styles.histoLabel}>{cat?.emoji ?? ''} {cat ? t(cat.label) : key}</Text>
                   <View style={styles.histoTrack}>
                     <View style={[styles.histoFill, { flex: count / (catEntries[0][1] || 1), backgroundColor: '#D4517E' }]} />
                     {count < catEntries[0][1] && <View style={{ flex: 1 - count / catEntries[0][1] }} />}
@@ -235,7 +230,7 @@ export default function Stats() {
         {/* Meilleur jour */}
         {meilleurJour && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Meilleur jour</Text>
+            <Text style={styles.sectionTitle}>{t("Meilleur jour")}</Text>
             <View style={styles.jourRow}>
               {[0, 1, 2, 3, 4, 5, 6].map((j) => {
                 const data = jourMap[j]
@@ -253,7 +248,7 @@ export default function Stats() {
               })}
             </View>
             <Text style={styles.jourCaption}>
-              Tu sors le plus souvent le <Text style={styles.jourHighlight}>{JOURS[meilleurJour.jour]}</Text> (moy. {meilleurJour.moy.toFixed(1)}/20)
+              {t("Tes dates du")} <Text style={styles.jourHighlight}>{JOURS_LONGS[meilleurJour.jour]}</Text> {t("sont les mieux notés (moy. {moy}/20)", { moy: meilleurJour.moy.toFixed(1) })}
             </Text>
           </View>
         )}
@@ -261,7 +256,7 @@ export default function Stats() {
         {/* Top lieux */}
         {topLieux.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Top lieux</Text>
+            <Text style={styles.sectionTitle}>{t("Top lieux")}</Text>
             {topLieux.map((l, i) => (
               <View key={i} style={styles.lieuRow}>
                 <Text style={styles.lieuRank}>#{i + 1}</Text>
@@ -283,6 +278,8 @@ export default function Stats() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

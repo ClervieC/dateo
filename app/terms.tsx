@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { webContentStyle } from '../lib/webStyles'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t, getLang } from '../lib/i18n'
 
 const SECTIONS = [
   {
@@ -52,30 +54,71 @@ const SECTIONS = [
   },
 ]
 
+// Version anglaise des conditions (même structure que SECTIONS)
+const SECTIONS_EN = [
+  {
+    title: '1. Purpose',
+    body:
+      'Dateo is a personal journal for outings and dates, letting you rate them, share them with friends you choose, and track statistics. Using the app means you fully accept these terms.',
+  },
+  {
+    title: '2. Minimum age',
+    body:
+      'Sign-up is restricted to people aged 16 or over. By creating an account, you confirm that you meet this requirement.',
+  },
+  {
+    title: '3. User account',
+    body:
+      'You are responsible for keeping your login details confidential and for any activity carried out from your account. One account per person; accounts created for fraud or harassment may be suspended without notice.',
+  },
+  {
+    title: '4. Published content',
+    body:
+      'You remain the owner of the content (text, photos, comments) you publish. You agree not to publish content that is illegal, abusive, defamatory, or that infringes the rights of others (including the image rights of people mentioned in a date). You are solely responsible for the content you publish.',
+  },
+  {
+    title: '5. Behavior',
+    body:
+      'Harassment, threats, spam or any misuse of the social features (comments, mentions, friend requests) may lead to a report, being blocked by other users, or account suspension. A report and block tool is available on every profile.',
+  },
+  {
+    title: '6. Personal data',
+    body:
+      'How your personal data is processed is described in our privacy policy, available separately. You can export or delete your data at any time from the settings.',
+  },
+  {
+    title: '7. Service availability',
+    body:
+      'The app is provided "as is". We do our best to keep it available but cannot guarantee it will be completely free of interruptions or errors.',
+  },
+  {
+    title: '8. Termination',
+    body:
+      'You can delete your account at any time from the settings; this cannot be undone. We reserve the right to suspend or delete an account that breaches these terms.',
+  },
+  {
+    title: '9. Changes',
+    body:
+      'These terms may change. You will be notified in the app of any substantial change.',
+  },
+]
+
 export default function Terms() {
+  const sections = getLang() === 'en' ? SECTIONS_EN : SECTIONS
   const router = useRouter()
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Conditions d'utilisation</Text>
-        <View style={{ width: 80 }} />
-      </View>
+      <ScreenHeader title={t("Conditions d'utilisation")} />
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
         <View style={styles.disclaimer}>
           <Text style={styles.disclaimerText}>
-            ⚠️ Ce document est un résumé fonctionnel, pas un texte juridique validé par un professionnel du droit.
-            Avant publication commerciale, fais relire/rédiger ces conditions par un juriste, en particulier pour la
-            conformité RGPD, la modération de contenu et la juridiction applicable.
+            {t("⚠️ Ce document est un résumé fonctionnel, pas un texte juridique validé par un professionnel du droit. Avant publication commerciale, fais relire/rédiger ces conditions par un juriste, en particulier pour la conformité RGPD, la modération de contenu et la juridiction applicable.")}
           </Text>
         </View>
 
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <View key={s.title} style={styles.card}>
             <Text style={styles.cardTitle}>{s.title}</Text>
             <Text style={styles.cardBody}>{s.body}</Text>

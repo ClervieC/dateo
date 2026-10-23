@@ -56,7 +56,8 @@ Deno.serve(async (req) => {
   if (!date || date.user_id === user.id) return json({ ok: true })
 
   const [{ data: profile }, { data: sender }] = await Promise.all([
-    supabase.from('profiles').select('expo_push_token').eq('id', date.user_id).single(),
+    // select('*') : la colonne « langue » peut ne pas exister tant que la migration n'est pas passée (→ français)
+    supabase.from('profiles').select('*').eq('id', date.user_id).single(),
     supabase.from('profiles').select('username').eq('id', user.id).single(),
   ])
   if (!profile?.expo_push_token) return json({ ok: true })
@@ -66,8 +67,10 @@ Deno.serve(async (req) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       to: profile.expo_push_token,
-      title: '❤️ Nouveau j\'aime',
-      body: `@${sender?.username ?? 'Quelqu\'un'} a aimé "${date.intitule || date.lieu || 'ton date'}"`,
+      title: (profile as any).langue === 'en' ? '❤️ New like' : '❤️ Nouveau j\'aime',
+      body: (profile as any).langue === 'en'
+        ? `@${sender?.username ?? 'Someone'} liked "${date.intitule || date.lieu || 'your date'}"`
+        : `@${sender?.username ?? 'Quelqu\'un'} a aimé "${date.intitule || date.lieu || 'ton date'}"`,
       sound: 'default',
     }),
   })

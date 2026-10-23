@@ -61,16 +61,24 @@ Deno.serve(async (req) => {
 
   const [{ data: sender }, { data: recipient }] = await Promise.all([
     supabase.from('profiles').select('username').eq('id', user.id).single(),
-    supabase.from('profiles').select('expo_push_token').eq('id', recipient_id).single(),
+    // select('*') : la colonne « langue » peut ne pas exister tant que la migration n'est pas passée (→ français)
+    supabase.from('profiles').select('*').eq('id', recipient_id).single(),
   ])
   if (!recipient?.expo_push_token) return json({ ok: true })
 
-  const senderUsername = sender?.username ?? 'Quelqu\'un'
+  const en = (recipient as any).langue === 'en'
+  const senderUsername = sender?.username ?? (en ? 'Someone' : 'Quelqu\'un')
   const { title, body } = type === 'friend_request'
-    ? { title: '💌 Nouvelle demande d\'ami', body: `${senderUsername} veut être ton ami sur Dateo` }
+    ? (en
+      ? { title: '💌 New friend request', body: `${senderUsername} wants to be your friend on Dateo` }
+      : { title: '💌 Nouvelle demande d\'ami', body: `${senderUsername} veut être ton ami sur Dateo` })
     : type === 'couple_invite'
-    ? { title: '💑 Invitation en mode couple', body: `${senderUsername} veut lier son compte au tien sur Dateo` }
-    : { title: '💑 Invitation acceptée', body: `${senderUsername} a accepté ton invitation en mode couple` }
+    ? (en
+      ? { title: '💑 Couple mode invitation', body: `${senderUsername} wants to link their account to yours on Dateo` }
+      : { title: '💑 Invitation en mode couple', body: `${senderUsername} veut lier son compte au tien sur Dateo` })
+    : (en
+      ? { title: '💑 Invitation accepted', body: `${senderUsername} accepted your couple mode invitation` }
+      : { title: '💑 Invitation acceptée', body: `${senderUsername} a accepté ton invitation en mode couple` })
 
   await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',

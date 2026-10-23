@@ -9,6 +9,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { webContentStyle } from "../lib/webStyles";
+import { ScreenHeader } from "../lib/ScreenHeader";
+import { t } from '../lib/i18n'
 
 // Page publique, accessible sans connexion (voir la liste PUBLIC_ROUTES dans
 // app/_layout.tsx) : les stores (Apple notamment) exigent que les instructions de
@@ -19,43 +21,28 @@ export default function DeleteAccountInfo() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Suppression de compte</Text>
-        <View style={{ width: 80 }} />
-      </View>
+      <ScreenHeader title={t("Suppression de compte")} />
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Si tu peux te connecter</Text>
+          <Text style={styles.cardTitle}>{t("Si tu peux te connecter")}</Text>
           <Text style={styles.cardBody}>
-            Va dans Réglages → Zone de danger → "Supprimer mon compte". La
-            suppression est immédiate et définitive : ton profil, tes dates, tes
-            photos, commentaires, réactions et relations (amis, couple) sont
-            effacés, y compris ce que tu as laissé sur les dates d'autres
-            utilisateurs.
+            {t("Va dans Réglages → Zone de danger → « Supprimer mon compte ». La suppression est immédiate et définitive : ton profil, tes dates, tes photos, commentaires, réactions et relations (amis, couple) sont effacés, y compris ce que tu as laissé sur les dates d'autres utilisateurs.")}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Si tu ne peux pas te connecter</Text>
+          <Text style={styles.cardTitle}>{t("Si tu ne peux pas te connecter")}</Text>
           <Text style={styles.cardBody}>
-            Écris-nous à l'adresse ci-dessous depuis l'adresse email associée à
-            ton compte, en précisant ton nom d'utilisateur Dateo. Nous traitons
-            les demandes de suppression sous 30 jours maximum.
+            {t("Écris-nous à l'adresse ci-dessous depuis l'adresse email associée à ton compte, en précisant ton nom d'utilisateur Dateo. Nous traitons les demandes de suppression sous 30 jours maximum.")}
           </Text>
           <Text style={styles.contactEmail}>clervie@bluedays.com</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Ce qui est supprimé</Text>
+          <Text style={styles.cardTitle}>{t("Ce qui est supprimé")}</Text>
           <Text style={styles.cardBody}>
-            Profil, dates enregistrés, photos, commentaires, réactions, favoris,
-            lieux à essayer, relation en couple, liste d'amis, et le compte
-            d'authentification lui-même. La suppression est irréversible.
+            {t("Profil, dates enregistrés, photos, commentaires, réactions, favoris, lieux à essayer, relation en couple, liste d'amis, et le compte d'authentification lui-même. La suppression est irréversible.")}
           </Text>
         </View>
       </ScrollView>

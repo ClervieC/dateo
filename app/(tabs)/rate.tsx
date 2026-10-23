@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Switch, Modal } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Switch, Modal } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -15,19 +15,15 @@ import { DatePicker } from '../../lib/DatePicker'
 import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'react-native'
 import { uriToBlob } from '../../lib/uploadImage'
+import { showAlert, confirmAction } from '../../lib/alert'
+import { saveRatings } from '../../lib/ratings'
+import { CRITERES } from '../../lib/criteres'
+import { useBottomTabs } from '../../lib/useBottomTabs'
+import { t } from '../../lib/i18n'
 
 const RATE_DRAFT_KEY = 'rateFormDraft'
 const DEFAULT_RATINGS = { mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 }
 
-const CRITERES = [
-  { key: 'mood', label: 'Mood' },
-  { key: 'nourriture', label: 'Nourriture' },
-  { key: 'ambiance', label: 'Ambiance' },
-  { key: 'personne', label: 'La personne' },
-  { key: 'conversation', label: 'Conversation' },
-  { key: 'prix', label: 'Prix / Valeur' },
-  { key: 'envie_recommencer', label: 'Envie de recommencer' },
-]
 
 type PlanifieDate = {
   id: string
@@ -48,7 +44,8 @@ type WishlistLieu = {
 }
 
 export default function Rate() {
-  const { lieu: lieuParam, intitule: intituleParam } = useLocalSearchParams<{ lieu?: string; intitule?: string }>()
+  const { lieu: lieuParam, intitule: intituleParam, planifieId: planifieIdParam, wishlistId: wishlistIdParam } =
+    useLocalSearchParams<{ lieu?: string; intitule?: string; planifieId?: string; wishlistId?: string }>()
   const [intitule, setIntitule] = useState(typeof intituleParam === 'string' ? intituleParam : '')
   const [lieu, setLieu] = useState(typeof lieuParam === 'string' ? lieuParam : '')
   const [dateIso, setDateIso] = useState(todayIso())
@@ -72,7 +69,11 @@ export default function Rate() {
   const [wishlistLieux, setWishlistLieux] = useState<WishlistLieu[]>([])
   const [selectedWishlistId, setSelectedWishlistId] = useState<string | null>(null)
   const [pickerVisible, setPickerVisible] = useState(false)
+  const [lieuError, setLieuError] = useState('')
+  const scrollRef = useRef<ScrollView>(null)
   const router = useRouter()
+  // Cloche dans l'en-tête sur téléphone ; sur ordinateur elle est dans la barre du haut
+  const showBell = useBottomTabs()
   const draftReadyRef = useRef(false)
 
   useEffect(() => {
@@ -80,11 +81,34 @@ export default function Rate() {
     if (intituleParam && typeof intituleParam === 'string') setIntitule(intituleParam)
   }, [lieuParam, intituleParam])
 
-  // Restaure le brouillon (si l'écran n'a pas été ouvert avec un lieu/intitulé prérempli)
+  // Ouvert depuis le détail d'un date planifié (« Noter ce date ») ou depuis
+  // « Lieux à essayer » (« J'y suis allé ») : on préremplit avec cette source.
+  useEffect(() => {
+    if (typeof planifieIdParam !== 'string' || !planifieIdParam) return
+    supabase
+      .from('dates')
+      .select('id, intitule, lieu, date_du_date, categorie, visibilite')
+      .eq('id', planifieIdParam)
+      .eq('statut', 'planifie')
+      .maybeSingle()
+      .then(({ data }) => { if (data) selectPlanifie(data as PlanifieDate) })
+  }, [planifieIdParam])
+
+  useEffect(() => {
+    if (typeof wishlistIdParam !== 'string' || !wishlistIdParam) return
+    supabase
+      .from('wishlist_lieux')
+      .select('id, nom, adresse, categorie')
+      .eq('id', wishlistIdParam)
+      .maybeSingle()
+      .then(({ data }) => { if (data) selectWishlistLieu(data as WishlistLieu) })
+  }, [wishlistIdParam])
+
+  // Restaure le brouillon (si l'écran n'a pas été ouvert avec une source préremplie)
   // pour ne pas perdre la saisie quand on change d'onglet puis qu'on revient.
   useEffect(() => {
     async function restoreDraft() {
-      if (!lieuParam && !intituleParam) {
+      if (!lieuParam && !intituleParam && !planifieIdParam && !wishlistIdParam) {
         const raw = await AsyncStorage.getItem(RATE_DRAFT_KEY)
         if (raw) {
           try {
@@ -229,16 +253,7 @@ export default function Rate() {
   }
 
   function confirmResetForm() {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Réinitialiser le formulaire ? Toutes les informations saisies seront effacées.')) {
-        resetForm()
-      }
-      return
-    }
-    Alert.alert('Réinitialiser le formulaire ?', 'Toutes les informations saisies seront effacées.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Réinitialiser', style: 'destructive', onPress: resetForm },
-    ])
+    confirmAction(t("Réinitialiser le formulaire ?"), t("Toutes les informations saisies seront effacées."), t("Réinitialiser"), resetForm)
   }
 
   function clearSource() {
@@ -261,7 +276,8 @@ export default function Rate() {
   async function handleSave() {
     if (saving) return
     if (!lieu.trim()) {
-      Alert.alert('Oups', 'Indique le lieu du date')
+      setLieuError(t("Indique le lieu du date"))
+      scrollRef.current?.scrollTo({ y: 0, animated: true })
       return
     }
 
@@ -270,13 +286,13 @@ export default function Rate() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSaving(false)
-      Alert.alert('Erreur', 'Tu dois être connecté')
+      showAlert(t("Erreur"), t("Tu dois être connecté"))
       return
     }
 
     const payload = {
       intitule: intitule.trim() || null,
-      lieu,
+      lieu: lieu.trim(),
       date_du_date: dateIso,
       note_globale: statut === 'vecu' ? Math.round(noteGlobale * 4) / 4 : null,
       commentaire,
@@ -292,23 +308,14 @@ export default function Rate() {
 
     if (dateError) {
       setSaving(false)
-      Alert.alert('Erreur', dateError.message)
+      showAlert(t("Impossible d'enregistrer le date"), dateError.message)
       return
     }
 
     await uploadPhotos(user.id, dateRow.id)
 
-    const round4 = (v: number) => Math.round(v * 4) / 4
-    const { error: ratingError } = await supabase.from('ratings').insert({
-      date_id: dateRow.id,
-      mood: round4(ratings.mood),
-      nourriture: round4(ratings.nourriture),
-      ambiance: round4(ratings.ambiance),
-      personne: round4(ratings.personne),
-      conversation: round4(ratings.conversation),
-      prix: round4(ratings.prix),
-      envie_recommencer: round4(ratings.envie_recommencer),
-    })
+    // Un date planifié n'a pas encore de note : on n'enregistre pas de critères par défaut
+    const { error: ratingError } = statut === 'vecu' ? await saveRatings(dateRow.id, ratings) : { error: null }
 
     if (selectedCompanionIds.size > 0) {
       await supabase.from('date_participants').upsert(
@@ -324,19 +331,18 @@ export default function Rate() {
     setSaving(false)
 
     if (ratingError) {
-      Alert.alert('Erreur', ratingError.message)
-      return
+      showAlert(t("Date enregistré, mais pas le détail des notes"), ratingError.message)
     }
 
     resetForm()
 
-    toastStore.set('Date enregistré avec succès ✓')
+    toastStore.set(statut === 'vecu' ? t("Date enregistré ✓") : t("Date planifié ✓ Tu pourras le noter une fois passé"))
     router.replace('/(tabs)/feed')
   }
 
   async function pickImages() {
     if (photoUris.length >= MAX_PHOTOS) {
-      Alert.alert('Limite atteinte', `Tu peux ajouter ${MAX_PHOTOS} photos maximum`)
+      showAlert(t("Limite atteinte"), t("Tu peux ajouter {n} photos maximum", { n: MAX_PHOTOS }))
       return
     }
 
@@ -399,23 +405,23 @@ export default function Rate() {
     setUploadingPhotos(false)
 
     if (failCount > 0) {
-      Alert.alert('Attention', `${failCount} photo(s) n'ont pas pu être uploadées`)
+      showAlert(t("Attention"), t("{n} photo(s) n'ont pas pu être envoyée(s)", { n: failCount }))
     }
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={styles.container} contentContainerStyle={[styles.content, webContentStyle]}>
+        <ScrollView ref={scrollRef} style={styles.container} contentContainerStyle={[styles.content, webContentStyle]} keyboardShouldPersistTaps="handled">
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{editingPlanifieId ? 'Noter un date planifié' : 'Nouveau date'}</Text>
-            {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
+            <Text style={styles.title}>{editingPlanifieId ? t("Noter un date planifié") : t("Nouveau date")}</Text>
+            {showBell && <NotificationBell style={styles.bellBtn} />}
           </View>
 
           {!editingPlanifieId && !selectedWishlistId && (planifiedDates.length > 0 || wishlistLieux.length > 0) && (
             <TouchableOpacity style={styles.sourceEntryBtn} onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
               <Ionicons name="calendar-outline" size={16} color="#D4517E" />
-              <Text style={styles.sourceEntryText}>Partir d'un date planifié ou d'un lieu à essayer</Text>
+              <Text style={styles.sourceEntryText}>{t("Partir d'un date planifié ou d'un lieu à essayer")}</Text>
               <Ionicons name="chevron-forward" size={14} color="#B8A9A0" />
             </TouchableOpacity>
           )}
@@ -423,7 +429,7 @@ export default function Rate() {
           {(editingPlanifieId || selectedWishlistId) && (
             <View style={styles.sourceBadge}>
               <Text style={styles.sourceBadgeText} numberOfLines={1}>
-                {editingPlanifieId ? `📅 Depuis ton date planifié : ${lieu}` : `📍 Depuis "Lieux à essayer" : ${lieu}`}
+                {editingPlanifieId ? t("📅 Depuis ton date planifié : {lieu}", { lieu }) : t("📍 Depuis « Lieux à essayer » : {lieu}", { lieu })}
               </Text>
               <TouchableOpacity onPress={clearSource} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="close-circle" size={20} color="#D4517E" />
@@ -431,69 +437,64 @@ export default function Rate() {
             </View>
           )}
 
-          {/* Options : statut vécu/planifié + visibilité */}
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>{statut === 'vecu' ? '✓ Déjà vécu' : '📅 À venir'}</Text>
-                <Text style={styles.toggleSubtext}>
-                  {statut === 'vecu' ? 'Tu peux le noter dès maintenant' : 'Tu pourras le noter une fois passé'}
-                </Text>
-              </View>
-              <Switch
-                value={statut === 'vecu'}
-                onValueChange={(v) => setStatut(v ? 'vecu' : 'planifie')}
-                trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
-                thumbColor="#fff"
-                ios_backgroundColor="#F0D9D9"
-              />
-            </View>
-
-            <View style={styles.cardDivider} />
-
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>{visibilite === 'friends' ? '👫 Visible par mes amis' : '🔒 Privé'}</Text>
-                <Text style={styles.toggleSubtext}>
-                  {visibilite === 'friends' ? 'Apparaît dans le feed de tes amis' : 'Visible seulement par toi'}
-                </Text>
-              </View>
-              <Switch
-                value={visibilite === 'friends'}
-                onValueChange={(v) => setVisibilite(v ? 'friends' : 'private')}
-                trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
-                thumbColor="#fff"
-                ios_backgroundColor="#F0D9D9"
-              />
-            </View>
+          {/* Statut : segmenté plutôt qu'un switch dont le libellé change */}
+          <View style={styles.segmented}>
+            {([
+              { key: 'vecu', label: t("✓ Déjà vécu") },
+              { key: 'planifie', label: t("📅 À venir") },
+            ] as const).map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.segment, statut === opt.key && styles.segmentActive]}
+                onPress={() => setStatut(opt.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: statut === opt.key }}
+              >
+                <Text style={[styles.segmentText, statut === opt.key && styles.segmentTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
+          <Text style={styles.segmentHint}>
+            {statut === 'vecu' ? t("Note ce date dès maintenant") : t("Garde-le de côté, tu pourras le noter une fois passé")}
+          </Text>
 
           {/* Infos principales */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Infos</Text>
+            <Text style={styles.cardTitle}>{t("Infos")}</Text>
 
-            <Text style={styles.label}>Lieu</Text>
+            <Text style={styles.label}>{t("Lieu")}</Text>
             <TextInput
-              style={styles.input}
-              placeholder="Ex : Le Petit Café, Bucarest"
+              style={[styles.input, !!lieuError && styles.inputError]}
+              placeholder={t("Ex : Le Petit Café, Bucarest")}
               placeholderTextColor="#B8A9A0"
               value={lieu}
-              onChangeText={setLieu}
+              onChangeText={(v) => { setLieu(v); if (v.trim()) setLieuError('') }}
             />
+            {lieuError ? <Text style={styles.fieldError}>{lieuError}</Text> : null}
 
-            <Text style={styles.label}>Intitulé <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+            <Text style={styles.label}>{t("Intitulé")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
             <TextInput
               style={styles.input}
-              placeholder="Ex : Dîner romantique, Soirée ciné..."
+              placeholder={t("Ex : Dîner romantique, Soirée ciné...")}
               placeholderTextColor="#B8A9A0"
               value={intitule}
               onChangeText={setIntitule}
             />
 
-            <Text style={styles.label}>Date</Text>
+            <Text style={styles.label}>{t("Date")}</Text>
             <DatePicker value={dateIso} onChange={setDateIso} />
+            {statut === 'vecu' && dateIso > todayIso() && (
+              <TouchableOpacity style={styles.dateWarning} onPress={() => setStatut('planifie')}>
+                <Text style={styles.dateWarningText}>{t("Cette date est dans le futur.")} <Text style={styles.dateWarningLink}>{t("C'est un date à venir ?")}</Text></Text>
+              </TouchableOpacity>
+            )}
+            {statut === 'planifie' && dateIso < todayIso() && (
+              <TouchableOpacity style={styles.dateWarning} onPress={() => setStatut('vecu')}>
+                <Text style={styles.dateWarningText}>{t("Cette date est passée.")} <Text style={styles.dateWarningLink}>{t("Le noter maintenant ?")}</Text></Text>
+              </TouchableOpacity>
+            )}
 
-            <Text style={[styles.label, { marginTop: 12 }]}>Catégorie <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+            <Text style={[styles.label, { marginTop: 12 }]}>{t("Catégorie")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
             <View style={styles.categoryRow}>
               {CATEGORIES.map((cat) => (
                 <TouchableOpacity
@@ -502,7 +503,7 @@ export default function Rate() {
                   onPress={() => setCategorie(categorie === cat.key ? null : cat.key)}
                 >
                   <Text style={[styles.categoryChipText, categorie === cat.key && styles.categoryChipTextActive]}>
-                    {cat.emoji} {cat.label}
+                    {cat.emoji} {t(cat.label)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -512,10 +513,10 @@ export default function Rate() {
           {/* Note et détails, uniquement si vécu */}
           {statut === 'vecu' && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Ta note</Text>
+              <Text style={styles.cardTitle}>{t("Ta note")}</Text>
 
               <View style={styles.globalNoteBox}>
-                <Text style={styles.label}>Note globale</Text>
+                <Text style={styles.label}>{t("Note globale")}</Text>
                 <Text style={styles.globalNoteValue}>{formatNote(noteGlobale)}<Text style={styles.globalNoteSuffix}>/20</Text></Text>
                 <Slider
                   style={{ width: '100%', height: 40 }}
@@ -533,7 +534,7 @@ export default function Rate() {
               {CRITERES.map((c) => (
                 <View key={c.key} style={styles.critereBox}>
                   <View style={styles.critereHeader}>
-                    <Text style={styles.label}>{c.label}</Text>
+                    <Text style={styles.label}>{t(c.label)}</Text>
                     <Text style={styles.critereValue}>{formatNote(ratings[c.key as keyof typeof ratings])}/5</Text>
                   </View>
                   <Slider
@@ -557,9 +558,9 @@ export default function Rate() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.conseilLabel, conseilVivement && styles.conseilLabelActive]}>
-                    💖 Je conseille vivement
+                    {t("💖 Je conseille vivement")}
                   </Text>
-                  <Text style={styles.conseilSubtext}>Mis en avant sur le feed de tes amis</Text>
+                  <Text style={styles.conseilSubtext}>{t("Mis en avant sur le feed de tes amis")}</Text>
                 </View>
                 <Switch
                   value={conseilVivement}
@@ -575,7 +576,7 @@ export default function Rate() {
           {/* Participants */}
           {companions.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Avec qui ? <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+              <Text style={styles.cardTitle}>{t("Avec qui ?")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
               <View style={styles.categoryRow}>
                 {companions.map((c) => (
                   <TouchableOpacity
@@ -594,12 +595,12 @@ export default function Rate() {
 
           {/* Souvenirs : commentaire + photos */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Souvenirs</Text>
+            <Text style={styles.cardTitle}>{t("Souvenirs")}</Text>
 
-            <Text style={styles.label}>Commentaire</Text>
+            <Text style={styles.label}>{t("Commentaire")}</Text>
             <TextInput
               style={[styles.input, styles.textarea]}
-              placeholder="Raconte ton date..."
+              placeholder={t("Raconte ton date...")}
               placeholderTextColor="#B8A9A0"
               value={commentaire}
               onChangeText={setCommentaire}
@@ -607,7 +608,7 @@ export default function Rate() {
               numberOfLines={4}
             />
 
-            <Text style={styles.label}>Photos ({photoUris.length}/{MAX_PHOTOS})</Text>
+            <Text style={styles.label}>{t("Photos")} ({photoUris.length}/{MAX_PHOTOS})</Text>
             <View style={styles.photoGallery}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {photoUris.map((uri) => (
@@ -627,14 +628,33 @@ export default function Rate() {
             </View>
           </View>
 
+          <View style={styles.card}>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleLabel}>{visibilite === 'friends' ? t("👫 Visible par mes amis") : t("🔒 Privé")}</Text>
+                <Text style={styles.toggleSubtext}>
+                  {visibilite === 'friends' ? t("Apparaît dans le feed de tes amis") : t("Visible seulement par toi")}
+                </Text>
+              </View>
+              <Switch
+                value={visibilite === 'friends'}
+                onValueChange={(v) => setVisibilite(v ? 'friends' : 'private')}
+                trackColor={{ false: '#F0D9D9', true: '#D4517E' }}
+                thumbColor="#fff"
+                ios_backgroundColor="#F0D9D9"
+                accessibilityLabel={t("Visible par mes amis")}
+              />
+            </View>
+          </View>
+
           <TouchableOpacity
-            style={styles.button}
+            style={[styles.button, (saving || uploadingPhotos) && { opacity: 0.6 }]}
             onPress={handleSave}
             disabled={saving || uploadingPhotos}
           >
-            <Text style={styles.buttonText}>
-              {saving && !uploadingPhotos ? 'Enregistrement...' : 'Enregistrer le date'}
-            </Text>
+            {saving && !uploadingPhotos
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.buttonText}>{statut === 'vecu' ? t("Enregistrer le date") : t("Planifier ce date")}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -642,7 +662,7 @@ export default function Rate() {
             onPress={confirmResetForm}
             disabled={saving || uploadingPhotos}
           >
-            <Text style={styles.resetButtonText}>Réinitialiser le formulaire</Text>
+            <Text style={styles.resetButtonText}>{t("Réinitialiser le formulaire")}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -651,7 +671,7 @@ export default function Rate() {
         <View style={styles.uploadOverlay}>
           <View style={styles.uploadCard}>
             <ActivityIndicator color="#D4517E" size="large" />
-            <Text style={styles.uploadTitle}>Envoi des photos</Text>
+            <Text style={styles.uploadTitle}>{t("Envoi des photos")}</Text>
             <Text style={styles.uploadCount}>{uploadProgress.current} / {uploadProgress.total}</Text>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { flex: uploadProgress.current }]} />
@@ -666,7 +686,7 @@ export default function Rate() {
       <Modal visible={pickerVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPickerVisible(false)}>
         <SafeAreaView style={styles.modalSafe} edges={['top']}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Partir d'un date planifié ou d'un lieu à essayer</Text>
+            <Text style={styles.modalTitle}>{t("Partir d'un date planifié ou d'un lieu à essayer")}</Text>
             <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close" size={24} color="#5C4A45" />
             </TouchableOpacity>
@@ -674,7 +694,7 @@ export default function Rate() {
           <ScrollView contentContainerStyle={styles.modalContent}>
             {planifiedDates.length > 0 && (
               <>
-                <Text style={styles.modalSectionTitle}>📅 Dates planifiés</Text>
+                <Text style={styles.modalSectionTitle}>{t("📅 Dates planifiés")}</Text>
                 {planifiedDates.map((p) => (
                   <TouchableOpacity key={p.id} style={styles.modalRow} onPress={() => selectPlanifie(p)}>
                     <View style={{ flex: 1 }}>
@@ -688,7 +708,7 @@ export default function Rate() {
             )}
             {wishlistLieux.length > 0 && (
               <>
-                <Text style={[styles.modalSectionTitle, { marginTop: planifiedDates.length > 0 ? 20 : 0 }]}>📍 Lieux à essayer</Text>
+                <Text style={[styles.modalSectionTitle, { marginTop: planifiedDates.length > 0 ? 20 : 0 }]}>{t("📍 Lieux à essayer")}</Text>
                 {wishlistLieux.map((w) => (
                   <TouchableOpacity key={w.id} style={styles.modalRow} onPress={() => selectWishlistLieu(w)}>
                     <View style={{ flex: 1 }}>
@@ -718,7 +738,17 @@ const styles = StyleSheet.create({
   labelOptional: { fontSize: 12, fontWeight: '400', color: '#B8A9A0' },
   card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F0D9D9' },
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45', marginBottom: 14 },
-  cardDivider: { height: 1, backgroundColor: '#F0D9D9', marginVertical: 14 },
+  segmented: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 14, padding: 4, borderWidth: 1, borderColor: '#F0D9D9' },
+  segment: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  segmentActive: { backgroundColor: '#D4517E' },
+  segmentText: { fontSize: 14, fontWeight: '600', color: '#5C4A45' },
+  segmentTextActive: { color: '#fff' },
+  segmentHint: { fontSize: 12, color: '#888', textAlign: 'center', marginTop: 6, marginBottom: 16 },
+  inputError: { borderColor: '#D85A30', marginBottom: 4 },
+  fieldError: { color: '#D85A30', fontSize: 12, marginBottom: 12 },
+  dateWarning: { backgroundColor: '#FFF3D6', borderRadius: 10, padding: 10, marginTop: -8, marginBottom: 8 },
+  dateWarningText: { fontSize: 12, color: '#8A6A1D' },
+  dateWarningLink: { fontWeight: '700', textDecorationLine: 'underline' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   toggleLabel: { fontSize: 15, fontWeight: '600', color: '#5C4A45' },
   toggleSubtext: { fontSize: 12, color: '#888', marginTop: 2 },

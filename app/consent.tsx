@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
+import { t } from '../lib/i18n'
 
 export default function Consent() {
   const [saving, setSaving] = useState(false)
@@ -22,7 +23,7 @@ export default function Consent() {
       .eq('id', user.id)
 
     setSaving(false)
-    if (updateError) { setError(`Erreur : ${updateError.message}`); return }
+    if (updateError) { setError(t("Erreur : {message}", { message: updateError.message })); return }
     router.replace('/(tabs)/feed')
   }
 
@@ -34,25 +35,25 @@ export default function Consent() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
-        <Text style={styles.title}>Avant de continuer</Text>
+        <Text style={styles.title}>{t("Avant de continuer")}</Text>
         <Text style={styles.subtitle}>
-          Pour utiliser Dateo, tu dois accepter nos conditions d'utilisation et notre politique de confidentialité.
+          {t("Pour utiliser Dateo, tu dois accepter nos conditions d'utilisation et notre politique de confidentialité.")}
         </Text>
 
         <TouchableOpacity style={styles.linkCard} onPress={() => router.push('/terms')}>
-          <Text style={styles.linkCardText}>📄 Lire les conditions d'utilisation (CGU)</Text>
+          <Text style={styles.linkCardText}>{t("📄 Lire les conditions d'utilisation (CGU)")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.linkCard} onPress={() => router.push('/privacy')}>
-          <Text style={styles.linkCardText}>🔒 Lire la politique de confidentialité</Text>
+          <Text style={styles.linkCardText}>{t("🔒 Lire la politique de confidentialité")}</Text>
         </TouchableOpacity>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity style={styles.acceptButton} onPress={accept} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptButtonText}>J'accepte et je continue</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.acceptButtonText}>{t("J'accepte et je continue")}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={styles.declineButton} onPress={decline} disabled={saving}>
-          <Text style={styles.declineButtonText}>Je refuse (déconnexion)</Text>
+          <Text style={styles.declineButtonText}>{t("Je refuse (déconnexion)")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

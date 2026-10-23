@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { todayIso, formaterDate } from '../lib/dateUtils'
 import { DatePicker } from '../lib/DatePicker'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
 type CoupleRow = {
   id: string
@@ -96,19 +98,21 @@ export default function Couple() {
     setSearching(true)
     setSearchMsg('')
 
-    const { data: profile } = await supabase
+    // « _ » est un joker en LIKE : on l'échappe pour une recherche exacte
+    const { data: matches } = await supabase
       .from('profiles')
       .select('id, username')
-      .ilike('username', q)
-      .single()
+      .ilike('username', q.replace(/_/g, '\\_'))
+      .limit(1)
+    const profile = (matches ?? [])[0]
 
-    if (!profile) { setSearchMsg('Utilisateur introuvable'); setSearching(false); return }
-    if (profile.id === myId) { setSearchMsg('Tu ne peux pas t\'inviter toi-même'); setSearching(false); return }
+    if (!profile) { setSearchMsg(t("Aucun compte avec le pseudo « {q} »", { q: searchUsername.trim() })); setSearching(false); return }
+    if (profile.id === myId) { setSearchMsg(t("Tu ne peux pas t'inviter toi-même")); setSearching(false); return }
 
     const { error } = await supabase.from('couples').insert({ user1_id: myId, user2_id: profile.id })
     setSearching(false)
     if (error) {
-      setSearchMsg(error.code === '23505' ? 'Invitation déjà envoyée' : `Erreur : ${error.message}`)
+      setSearchMsg(error.code === '23505' ? t("Une invitation existe déjà (toi ou cette personne êtes peut-être déjà en couple)") : t("Erreur : {message}", { message: error.message }))
     } else {
       setSearchMsg('')
       setSearchUsername('')
@@ -136,17 +140,19 @@ export default function Couple() {
   async function acceptInvite() {
     if (!couple) return
     setDateDebutError('')
+    if (dateDebutIso > todayIso()) { setDateDebutError(t("Cette date est dans le futur")); return }
     setActioning(true)
     const { error } = await supabase.from('couples').update({ status: 'accepted', date_debut: dateDebutIso }).eq('id', couple.id)
     setActioning(false)
     if (!error) sendCoupleInviteNotification(couple.partnerId, 'accepted')
-    if (error) setActionMsg(`Erreur : ${error.message}`)
+    if (error) setActionMsg(t("Erreur : {message}", { message: error.message }))
     else await loadCouple()
   }
 
   async function saveDateDebut() {
     if (!couple) return
     setDateDebutError('')
+    if (dateDebutIso > todayIso()) { setDateDebutError(t("Cette date est dans le futur")); return }
     setSavingDateDebut(true)
     const { error } = await supabase.from('couples').update({ date_debut: dateDebutIso }).eq('id', couple.id)
     setSavingDateDebut(false)
@@ -183,39 +189,36 @@ export default function Couple() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mode Couple</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Mode couple")} />
 
       <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>💑</Text>
-          <Text style={styles.heroTitle}>Lier vos comptes</Text>
+          <Text style={styles.heroTitle}>{t("Lie ton compte à celui de ton/ta partenaire")}</Text>
           <Text style={styles.heroSub}>
-            Reliez votre compte à celui de votre partenaire pour partager vos dates dans le feed et voir un badge couple.
+            {t("Vos dates apparaissent dans vos feeds respectifs, il/elle est proposé(e) automatiquement dans « Avec qui ? » et peut donner son propre avis sur vos dates.")}
           </Text>
         </View>
 
         {/* Pas de couple */}
         {!couple && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Inviter mon partenaire</Text>
+            <Text style={styles.sectionTitle}>{t("Inviter mon partenaire")}</Text>
             <TextInput
               style={styles.input}
               value={searchUsername}
               onChangeText={(v) => { setSearchUsername(v); setSearchMsg('') }}
-              placeholder="Pseudo de ton partenaire"
+              placeholder={t("Son pseudo, ex : clervie.d")}
               placeholderTextColor="#B8A9A0"
               autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="send"
+              onSubmitEditing={sendInvite}
             />
+            <Text style={styles.inviteHint}>{t("Il/elle recevra une invitation à accepter dans l'app.")}</Text>
             {searchMsg ? <Text style={styles.msgError}>{searchMsg}</Text> : null}
-            <TouchableOpacity style={styles.btn} onPress={sendInvite} disabled={searching}>
-              <Text style={styles.btnText}>{searching ? '...' : 'Envoyer l\'invitation'}</Text>
+            <TouchableOpacity style={[styles.btn, (!searchUsername.trim() || searching) && { opacity: 0.5 }]} onPress={sendInvite} disabled={searching || !searchUsername.trim()}>
+              <Text style={styles.btnText}>{searching ? t("Envoi…") : t("Envoyer l'invitation")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -223,7 +226,7 @@ export default function Couple() {
         {/* Invitation reçue (tu es user2, status pending) */}
         {couple && couple.status === 'pending' && !couple.isSender && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Invitation reçue</Text>
+            <Text style={styles.sectionTitle}>{t("Invitation reçue")}</Text>
             <View style={styles.partnerCard}>
               {couple.partnerAvatar ? (
                 <Image source={{ uri: couple.partnerAvatar }} style={styles.partnerAvatar} />
@@ -234,28 +237,28 @@ export default function Couple() {
               )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.partnerName}>@{couple.partnerUsername}</Text>
-                <Text style={styles.partnerSub}>t'a invité(e) en mode couple</Text>
+                <Text style={styles.partnerSub}>{t("t'a invité(e) en mode couple")}</Text>
               </View>
             </View>
-            <Text style={styles.label}>Vous êtes en couple depuis le :</Text>
+            <Text style={styles.label}>{t("Depuis quand êtes-vous ensemble ?")}</Text>
             <DatePicker value={dateDebutIso} onChange={(iso) => { setDateDebutIso(iso); setDateDebutError('') }} />
             {dateDebutError ? <Text style={styles.msgError}>{dateDebutError}</Text> : null}
             {actionMsg ? <Text style={styles.msgError}>{actionMsg}</Text> : null}
             <TouchableOpacity style={styles.btn} onPress={acceptInvite} disabled={actioning}>
-              <Text style={styles.btnText}>{actioning ? '...' : '✓ Accepter'}</Text>
+              <Text style={styles.btnText}>{actioning ? '...' : t("✓ Accepter")}</Text>
             </TouchableOpacity>
             {!confirmDecline ? (
               <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(true)} disabled={actioning}>
-                <Text style={styles.outlineBtnText}>Refuser</Text>
+                <Text style={styles.outlineBtnText}>{t("Refuser")}</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.confirmBox}>
-                <Text style={styles.confirmWarn}>Refuser cette invitation ?</Text>
+                <Text style={styles.confirmWarn}>{t("Refuser cette invitation ?")}</Text>
                 <TouchableOpacity style={styles.confirmYes} onPress={declineInvite} disabled={actioning}>
-                  <Text style={styles.confirmYesText}>{actioning ? '...' : 'Oui, refuser'}</Text>
+                  <Text style={styles.confirmYesText}>{actioning ? '...' : t("Oui, refuser")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(false)}>
-                  <Text style={styles.outlineBtnText}>Annuler</Text>
+                  <Text style={styles.outlineBtnText}>{t("Annuler")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -265,7 +268,7 @@ export default function Couple() {
         {/* Invitation envoyée (tu es user1, status pending) */}
         {couple && couple.status === 'pending' && couple.isSender && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Invitation envoyée</Text>
+            <Text style={styles.sectionTitle}>{t("Invitation envoyée")}</Text>
             <View style={styles.partnerCard}>
               {couple.partnerAvatar ? (
                 <Image source={{ uri: couple.partnerAvatar }} style={styles.partnerAvatar} />
@@ -276,21 +279,21 @@ export default function Couple() {
               )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.partnerName}>@{couple.partnerUsername}</Text>
-                <Text style={styles.partnerSub}>En attente d'acceptation…</Text>
+                <Text style={styles.partnerSub}>{t("En attente d'acceptation…")}</Text>
               </View>
             </View>
             {!confirmDecline ? (
               <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(true)}>
-                <Text style={styles.outlineBtnText}>Annuler l'invitation</Text>
+                <Text style={styles.outlineBtnText}>{t("Annuler l'invitation")}</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.confirmBox}>
-                <Text style={styles.confirmWarn}>Annuler cette invitation ?</Text>
+                <Text style={styles.confirmWarn}>{t("Annuler cette invitation ?")}</Text>
                 <TouchableOpacity style={styles.confirmYes} onPress={declineInvite} disabled={actioning}>
-                  <Text style={styles.confirmYesText}>{actioning ? '...' : "Oui, annuler l'invitation"}</Text>
+                  <Text style={styles.confirmYesText}>{actioning ? '...' : t("Oui, annuler l'invitation")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDecline(false)}>
-                  <Text style={styles.outlineBtnText}>Retour</Text>
+                  <Text style={styles.outlineBtnText}>{t("Retour")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -301,7 +304,7 @@ export default function Couple() {
         {couple && couple.status === 'accepted' && (
           <View style={styles.section}>
             <View style={styles.coupleActiveHeader}>
-              <Text style={styles.coupleActiveBadge}>💑 Couple lié</Text>
+              <Text style={styles.coupleActiveBadge}>{t("💑 Couple lié")}</Text>
             </View>
             <View style={styles.partnerCard}>
               {couple.partnerAvatar ? (
@@ -313,14 +316,14 @@ export default function Couple() {
               )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.partnerName}>@{couple.partnerUsername}</Text>
-                <Text style={styles.partnerSub}>Les dates de votre partenaire apparaissent dans votre feed</Text>
+                <Text style={styles.partnerSub}>{t("Ses dates apparaissent dans ton feed, et les tiens dans le sien")}</Text>
               </View>
             </View>
 
             {!editingDateDebut ? (
               <TouchableOpacity style={styles.dateDebutRow} onPress={() => { setDateDebutIso(couple.dateDebut ?? todayIso()); setEditingDateDebut(true) }}>
                 <Text style={styles.dateDebutText}>
-                  {couple.dateDebut ? `💕 Ensemble depuis le ${formaterDate(couple.dateDebut)}` : '💕 Ajouter la date de mise en couple'}
+                  {couple.dateDebut ? t("💕 Ensemble depuis le {date}", { date: formaterDate(couple.dateDebut) }) : t("💕 Ajouter la date de mise en couple")}
                 </Text>
                 <Ionicons name="pencil" size={13} color="#D4517E" />
               </TouchableOpacity>
@@ -330,10 +333,10 @@ export default function Couple() {
                 {dateDebutError ? <Text style={styles.msgError}>{dateDebutError}</Text> : null}
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={saveDateDebut} disabled={savingDateDebut}>
-                    <Text style={styles.btnText}>{savingDateDebut ? '...' : 'Enregistrer'}</Text>
+                    <Text style={styles.btnText}>{savingDateDebut ? '...' : t("Enregistrer")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.outlineBtn, { flex: 1 }]} onPress={() => { setEditingDateDebut(false); setDateDebutError('') }}>
-                    <Text style={styles.outlineBtnText}>Annuler</Text>
+                    <Text style={styles.outlineBtnText}>{t("Annuler")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -343,29 +346,29 @@ export default function Couple() {
               <View style={styles.statsRow}>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{coupleStats.myCount}</Text>
-                  <Text style={styles.statLabel}>tes dates</Text>
+                  <Text style={styles.statLabel}>{t("tes dates")}</Text>
                   {coupleStats.myCount > 0 && <Text style={styles.statMoy}>{coupleStats.myMoyenne.toFixed(1)}/20</Text>}
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{coupleStats.partnerCount}</Text>
-                  <Text style={styles.statLabel}>dates de {couple.partnerUsername.split(' ')[0]}</Text>
+                  <Text style={styles.statLabel}>{t("dates de {nom}", { nom: couple.partnerUsername.split(' ')[0] })}</Text>
                   {coupleStats.partnerCount > 0 && <Text style={styles.statMoy}>{coupleStats.partnerMoyenne.toFixed(1)}/20</Text>}
                 </View>
               </View>
             )}
             {!confirmDisconnect ? (
               <TouchableOpacity style={styles.dangerBtn} onPress={() => setConfirmDisconnect(true)}>
-                <Text style={styles.dangerBtnText}>Se déconnecter du couple</Text>
+                <Text style={styles.dangerBtnText}>{t("Se déconnecter du couple")}</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.confirmBox}>
-                <Text style={styles.confirmWarn}>Cela supprimera le lien entre vos comptes.</Text>
+                <Text style={styles.confirmWarn}>{t("Cela supprimera le lien entre vos comptes.")}</Text>
                 <TouchableOpacity style={styles.confirmYes} onPress={disconnect} disabled={actioning}>
-                  <Text style={styles.confirmYesText}>{actioning ? '...' : 'Oui, se déconnecter'}</Text>
+                  <Text style={styles.confirmYesText}>{actioning ? '...' : t("Oui, se déconnecter")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.outlineBtn} onPress={() => setConfirmDisconnect(false)}>
-                  <Text style={styles.outlineBtnText}>Annuler</Text>
+                  <Text style={styles.outlineBtnText}>{t("Annuler")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -378,6 +381,7 @@ export default function Couple() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  inviteHint: { fontSize: 12, color: '#888', marginTop: -4, marginBottom: 10 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 80 },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

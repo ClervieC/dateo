@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, Platform } from 'react-native'
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -8,11 +8,15 @@ import { supabase } from '../../lib/supabase'
 import { extraireCategories, filtrerParCategorie } from '../../lib/feedUtils'
 import { CATEGORIES, getCategoryLabel, getCategoryColor } from '../../lib/categories'
 import { webContentStyle } from '../../lib/webStyles'
+import { showAlert } from '../../lib/alert'
+import { useBottomTabs } from '../../lib/useBottomTabs'
+import { t, tKey, getLang } from '../../lib/i18n'
 
 type Idea = { id: string; titre: string; description: string | null; categorie: string | null; ville: string | null }
 
-const FILTER_FAVORIS = '❤️ Favoris'
-const FILTER_IA = '✨ Pour toi'
+const FILTER_FAVORIS = tKey("❤️ Favoris")
+const FILTER_IA = tKey("✨ Pour toi")
+const FILTER_ALL = tKey("Tout")
 
 export default function Ideas() {
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -31,11 +35,13 @@ export default function Ideas() {
   const [searchQuery, setSearchQuery] = useState('')
   const [ville, setVille] = useState<string | null>(null)
   const router = useRouter()
+  // Cloche dans l'en-tête sur téléphone ; sur ordinateur elle est dans la barre du haut
+  const showBell = useBottomTabs()
 
   const REC_MODES: { key: 'best' | 'theme' | 'free'; emoji: string; label: string; hint: string }[] = [
-    { key: 'best', emoji: '⭐', label: 'Meilleurs dates', hint: 'Basé sur les dates que tu as le mieux notés' },
-    { key: 'theme', emoji: '🎨', label: 'Thème', hint: 'Choisis une ambiance précise' },
-    { key: 'free', emoji: '✍️', label: 'Envie libre', hint: 'Décris ce que tu as envie de faire' },
+    { key: 'best', emoji: '⭐', label: t("Meilleurs dates"), hint: t("Basé sur les dates que tu as le mieux notés") },
+    { key: 'theme', emoji: '🎨', label: t("Thème"), hint: t("Choisis une ambiance précise") },
+    { key: 'free', emoji: '✍️', label: t("Envie libre"), hint: t("Décris ce que tu as envie de faire") },
   ]
   const REC_THEMES = CATEGORIES
   const canGenerate = recMode === 'best' || (recMode === 'theme' && !!recTheme) || (recMode === 'free' && recFreeText.trim().length > 0)
@@ -131,7 +137,7 @@ export default function Ideas() {
         .single()
 
       if (insertError) {
-        Alert.alert('Erreur', `Impossible d'ajouter l'idée : ${insertError.message}\n\nExécute dans Supabase :\nCREATE POLICY "insert_ideas" ON date_ideas FOR INSERT WITH CHECK (auth.role() = 'authenticated');`)
+        showAlert(t("Impossible d'ajouter l'idée"), insertError.message)
         return
       }
 
@@ -168,7 +174,7 @@ export default function Ideas() {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ mode: recMode, theme: recTheme, freeText: recFreeText, ville }),
+        body: JSON.stringify({ mode: recMode, theme: recTheme, freeText: recFreeText, ville, lang: getLang() }),
       })
 
       const data = await response.json()
@@ -182,14 +188,15 @@ export default function Ideas() {
 
       if (data.recommendations && data.recommendations.length > 0) {
         setRecommendations(data.recommendations)
-        await saveRecommendationsToSharedList(data.recommendations)
+        // Le catalogue d'idées partagé est en français : on n'y ajoute pas les idées générées en anglais
+        if (getLang() === 'fr') await saveRecommendationsToSharedList(data.recommendations)
       } else if (data.message) {
         setRecsMessage(data.message)
       } else {
-        setRecsMessage("L'IA n'a pas généré de recommandations cette fois-ci")
+        setRecsMessage(t("L'IA n'a pas généré de recommandations cette fois-ci"))
       }
     } catch (err) {
-      setRecsMessage(`Erreur réseau : ${err instanceof Error ? err.message : 'inconnue'}`)
+      setRecsMessage(t("Erreur réseau : {message}", { message: err instanceof Error ? err.message : '?' }))
     } finally {
       setLoadingRecs(false)
     }
@@ -228,8 +235,8 @@ export default function Ideas() {
         ListHeaderComponent={
           <View>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>Idées de dates</Text>
-              {Platform.OS !== 'web' && <NotificationBell style={styles.bellBtn} />}
+              <Text style={styles.title}>{t("Idées de dates")}</Text>
+              {showBell && <NotificationBell style={styles.bellBtn} />}
             </View>
 
             <View style={styles.searchBar}>
@@ -238,7 +245,7 @@ export default function Ideas() {
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Rechercher une idée..."
+                placeholder={t("Rechercher une idée...")}
                 placeholderTextColor="#B8A9A0"
                 clearButtonMode="while-editing"
               />
@@ -246,9 +253,9 @@ export default function Ideas() {
 
             {loadError && (
               <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>Impossible de charger les idées. Vérifie ta connexion.</Text>
+                <Text style={styles.errorBannerText}>{t("Impossible de charger les idées. Vérifie ta connexion.")}</Text>
                 <TouchableOpacity onPress={loadIdeas}>
-                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                  <Text style={styles.errorBannerRetry}>{t("Réessayer")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -257,7 +264,7 @@ export default function Ideas() {
               <TouchableOpacity style={styles.wishlistTeaser} onPress={() => router.push('/settings')} activeOpacity={0.8}>
                 <Ionicons name="location-outline" size={16} color="#D4517E" />
                 <Text style={styles.iaTeaserText}>
-                  Renseigne <Text style={styles.iaTeaserLink}>ta ville dans les paramètres →</Text> pour voir des idées près de chez toi
+                  {t("Renseigne")} <Text style={styles.iaTeaserLink}>{t("ta ville dans les paramètres →")}</Text> {t("pour voir des idées près de chez toi")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -266,7 +273,16 @@ export default function Ideas() {
               <TouchableOpacity style={styles.iaTeaser} onPress={() => setSelectedCategorie(FILTER_IA)} activeOpacity={0.8}>
                 <Ionicons name="sparkles" size={16} color="#D4517E" />
                 <Text style={styles.iaTeaserText}>
-                  Pas d'inspiration ? Laisse l'IA te proposer des idées dans <Text style={styles.iaTeaserLink}>Pour toi →</Text>
+                  {t("Pas d'inspiration ? Laisse l'IA te proposer des idées dans")} <Text style={styles.iaTeaserLink}>{t("Pour toi →")}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {!selectedCategorie && !searchQuery.trim() && (
+              <TouchableOpacity style={styles.iaTeaser} onPress={() => router.push('/conversation')} activeOpacity={0.8}>
+                <Ionicons name="chatbubbles" size={16} color="#D4517E" />
+                <Text style={styles.iaTeaserText}>
+                  {t("Peur des blancs ? Prépare des")} <Text style={styles.iaTeaserLink}>{t("sujets de conversation →")}</Text>
                 </Text>
               </TouchableOpacity>
             )}
@@ -275,7 +291,7 @@ export default function Ideas() {
               <TouchableOpacity style={styles.wishlistTeaser} onPress={() => router.push('/wishlist')} activeOpacity={0.8}>
                 <Ionicons name="location" size={16} color="#D4517E" />
                 <Text style={styles.iaTeaserText}>
-                  Retrouve les lieux que tu veux essayer dans <Text style={styles.iaTeaserLink}>Lieux à essayer →</Text>
+                  {t("Retrouve les lieux que tu veux essayer dans")} <Text style={styles.iaTeaserLink}>{t("Lieux à essayer →")}</Text>
                 </Text>
               </TouchableOpacity>
             )}
@@ -283,13 +299,13 @@ export default function Ideas() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={['Tout', FILTER_FAVORIS, FILTER_IA, ...categories]}
+              data={[FILTER_ALL, FILTER_FAVORIS, FILTER_IA, ...categories]}
               keyExtractor={(item) => item}
               style={styles.filterRow}
               renderItem={({ item }) => {
-                const isSelected = item === 'Tout' ? !selectedCategorie : selectedCategorie === item
+                const isSelected = item === FILTER_ALL ? !selectedCategorie : selectedCategorie === item
                 const isFavFilter = item === FILTER_FAVORIS || item === FILTER_IA
-                const label = item === 'Tout' || isFavFilter ? item : getCategoryLabel(item)
+                const label = item === FILTER_ALL || isFavFilter ? t(item) : getCategoryLabel(item)
                 return (
                   <TouchableOpacity
                     style={[
@@ -297,7 +313,7 @@ export default function Ideas() {
                       isSelected && styles.filterChipActive,
                       isFavFilter && !isSelected && styles.filterChipFav,
                     ]}
-                    onPress={() => setSelectedCategorie(item === 'Tout' ? null : item)}
+                    onPress={() => setSelectedCategorie(item === FILTER_ALL ? null : item)}
                   >
                     <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
                       {label}
@@ -312,8 +328,8 @@ export default function Ideas() {
               <View style={styles.recsHeader}>
                 <Ionicons name="sparkles" size={18} color="#D4517E" />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.recsTitle}>Idées générées pour toi</Text>
-                  <Text style={styles.recsSubtitle}>Choisis une approche, l'IA s'occupe du reste</Text>
+                  <Text style={styles.recsTitle}>{t("Idées générées pour toi")}</Text>
+                  <Text style={styles.recsSubtitle}>{t("Choisis une approche, l'IA s'occupe du reste")}</Text>
                 </View>
               </View>
 
@@ -343,7 +359,7 @@ export default function Ideas() {
                       onPress={() => setRecTheme(recTheme === cat.key ? null : cat.key)}
                     >
                       <Text style={[styles.recThemeChipText, recTheme === cat.key && styles.recThemeChipTextActive]}>
-                        {cat.emoji} {cat.label}
+                        {cat.emoji} {t(cat.label)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -353,7 +369,7 @@ export default function Ideas() {
               {recMode === 'free' && (
                 <TextInput
                   style={styles.recFreeInput}
-                  placeholder="Ex : quelque chose de calme en extérieur, pas cher..."
+                  placeholder={t("Ex : quelque chose de calme en extérieur, pas cher...")}
                   placeholderTextColor="#B8A9A0"
                   value={recFreeText}
                   onChangeText={setRecFreeText}
@@ -367,16 +383,16 @@ export default function Ideas() {
               >
                 <Ionicons name="sparkles" size={15} color="#fff" />
                 <Text style={styles.recsButtonText}>
-                  {loadingRecs ? 'Génération...' : recommendations.length > 0 ? 'Régénérer' : 'Générer des idées'}
+                  {loadingRecs ? t("Génération...") : recommendations.length > 0 ? t("Régénérer") : t("Générer des idées")}
                 </Text>
               </TouchableOpacity>
 
               {loadingRecs && (
                 <View style={styles.thinkingCard}>
                   <ActivityIndicator color="#D4517E" size="large" />
-                  <Text style={styles.thinkingTitle}>L'IA réfléchit{thinkingDots}</Text>
+                  <Text style={styles.thinkingTitle}>{t("L'IA réfléchit")}{thinkingDots}</Text>
                   <Text style={styles.thinkingSubtext}>
-                    Analyse de tes dates passés pour trouver les meilleures idées pour toi
+                    {t("Analyse de tes dates passés pour trouver les meilleures idées pour toi")}
                   </Text>
                 </View>
               )}
@@ -419,7 +435,7 @@ export default function Ideas() {
                           </TouchableOpacity>
                         </View>
                         <Text style={styles.recReason}>{rec.raison}</Text>
-                        <Text style={styles.recCta}>Appuyer pour noter →</Text>
+                        <Text style={styles.recCta}>{t("Appuyer pour noter →")}</Text>
                       </TouchableOpacity>
                     )
                   })}
@@ -461,7 +477,7 @@ export default function Ideas() {
               {item.description ? (
                 <Text style={styles.ideaDescription}>{item.description}</Text>
               ) : null}
-              <Text style={styles.ideaCta}>Appuyer pour noter →</Text>
+              <Text style={styles.ideaCta}>{t("Appuyer pour noter →")}</Text>
             </TouchableOpacity>
           )
         }}
@@ -471,16 +487,16 @@ export default function Ideas() {
               {searchQuery.trim() ? (
                 <>
                   <Text style={styles.emptyIcon}>🔍</Text>
-                  <Text style={styles.empty}>Aucune idée ne correspond à "{searchQuery.trim()}"</Text>
+                  <Text style={styles.empty}>{t("Aucune idée ne correspond à « {q} »", { q: searchQuery.trim() })}</Text>
                 </>
               ) : selectedCategorie === FILTER_FAVORIS ? (
                 <>
                   <Text style={styles.emptyIcon}>🤍</Text>
-                  <Text style={styles.empty}>Aucun favori pour l'instant</Text>
-                  <Text style={styles.emptySub}>Appuie sur ❤️ sur une idée pour la sauvegarder</Text>
+                  <Text style={styles.empty}>{t("Aucun favori pour l'instant")}</Text>
+                  <Text style={styles.emptySub}>{t("Appuie sur ❤️ sur une idée pour la sauvegarder")}</Text>
                 </>
               ) : (
-                <Text style={styles.empty}>Aucune idée pour cette catégorie</Text>
+                <Text style={styles.empty}>{t("Aucune idée pour cette catégorie")}</Text>
               )}
             </View>
           ) : null

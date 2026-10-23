@@ -4,8 +4,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
-import { formaterDate } from '../lib/dateUtils'
+import { formaterDate, formatNote } from '../lib/dateUtils'
 import { webContentStyle } from '../lib/webStyles'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
 type Result = {
   type: 'date' | 'user'
@@ -30,7 +32,7 @@ export default function Search() {
 
     const [{ data: dates }, { data: users }] = await Promise.all([
       supabase.from('dates')
-        .select('id, intitule, lieu, date_du_date, note_globale')
+        .select('id, intitule, lieu, date_du_date, note_globale, statut')
         .eq('user_id', user.id)
         .or(`intitule.ilike.%${q}%,lieu.ilike.%${q}%`)
         .order('date_du_date', { ascending: false })
@@ -46,14 +48,14 @@ export default function Search() {
       type: 'date',
       id: d.id,
       title: d.intitule ?? d.lieu,
-      subtitle: `📍 ${d.lieu} · ${formaterDate(d.date_du_date)} · ${d.note_globale}/20`,
+      subtitle: `📍 ${d.lieu} · ${formaterDate(d.date_du_date)} · ${d.statut === 'planifie' || d.note_globale == null ? t("À venir") : `${formatNote(d.note_globale)}/20`}`,
     }))
 
     const userResults: Result[] = (users ?? []).map((u: any) => ({
       type: 'user',
       id: u.id,
       title: `@${u.username}`,
-      subtitle: 'Utilisateur',
+      subtitle: t("Voir son profil"),
     }))
 
     setResults([...dateResults, ...userResults])
@@ -73,14 +75,7 @@ export default function Search() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Recherche</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Recherche")} />
 
       <View style={styles.searchBox}>
         <Ionicons name="search" size={18} color="#B8A9A0" />
@@ -88,7 +83,7 @@ export default function Search() {
           style={styles.searchInput}
           value={query}
           onChangeText={handleChange}
-          placeholder="Dates, lieux, utilisateurs..."
+          placeholder={t("Dates, lieux, utilisateurs...")}
           placeholderTextColor="#B8A9A0"
           autoFocus
           clearButtonMode="while-editing"
@@ -102,9 +97,9 @@ export default function Search() {
         keyExtractor={(item) => `${item.type}_${item.id}`}
         ListEmptyComponent={
           query.length >= 2 && !loading ? (
-            <Text style={styles.emptyText}>Aucun résultat pour "{query}"</Text>
+            <Text style={styles.emptyText}>{t("Aucun résultat pour « {q} »", { q: query })}</Text>
           ) : query.length < 2 ? (
-            <Text style={styles.hintText}>Tape au moins 2 caractères pour chercher</Text>
+            <Text style={styles.hintText}>{t("Cherche parmi tes dates (lieu, intitulé) ou un pseudo")}</Text>
           ) : null
         }
         renderItem={({ item }) => (

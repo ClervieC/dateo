@@ -34,10 +34,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Utilisateur non trouvé' })
     }
 
-    let body: { mode?: string; theme?: string; freeText?: string; ville?: string } = {}
+    let body: { mode?: string; theme?: string; freeText?: string; ville?: string; lang?: string } = {}
     try { body = await req.json() } catch { /* pas de body = mode par défaut */ }
     const mode = body.mode === 'theme' || body.mode === 'free' ? body.mode : 'best'
     const ville = (body.ville ?? '').trim()
+    const en = body.lang === 'en'
+    // Le prompt reste en français ; seule la langue de la réponse change
+    const langInstruction = en
+      ? '\nIMPORTANT : rédige les champs "titre" et "raison" en ANGLAIS naturel (la clé "categorie" reste une des valeurs imposées).\n'
+      : ''
 
     const { data: existingIdeas } = await supabase
       .from('date_ideas')
@@ -52,7 +57,7 @@ Deno.serve(async (req) => {
 
     if (mode === 'theme') {
       const theme = (body.theme ?? '').trim()
-      if (!theme || !CATEGORY_KEYS.includes(theme)) return jsonResponse({ error: 'Choisis un thème' })
+      if (!theme || !CATEGORY_KEYS.includes(theme)) return jsonResponse({ error: en ? 'Pick a theme' : 'Choisis un thème' })
       prompt = `Tu es un expert en idées de rendez-vous amoureux romantiques et originaux.
 ${villeContext}
 Thème demandé (IMPORTANT, à respecter strictement pour les 3 idées) : ${theme}
@@ -66,7 +71,7 @@ Réponds UNIQUEMENT avec ce JSON, sans texte avant ou après :
 {"recommendations": [{"titre": "Nom court", "raison": "Pourquoi ça correspond au thème ${theme} (1 phrase)", "categorie": "${theme}"}]}`
     } else if (mode === 'free') {
       const freeText = (body.freeText ?? '').trim()
-      if (!freeText) return jsonResponse({ error: 'Décris ton idée en quelques mots' })
+      if (!freeText) return jsonResponse({ error: en ? 'Describe your idea in a few words' : 'Décris ton idée en quelques mots' })
       prompt = `Tu es un expert en idées de rendez-vous amoureux romantiques et originaux.
 ${villeContext}
 Envie exprimée par l'utilisateur : "${freeText}"
@@ -94,7 +99,7 @@ Réponds UNIQUEMENT avec ce JSON, sans texte avant ou après :
       if (!topDates || topDates.length === 0) {
         return jsonResponse({
           recommendations: [],
-          message: 'Note quelques dates (12+/20) pour débloquer des recommandations personnalisées ✨',
+          message: en ? 'Rate a few dates (12+/20) to unlock personalized recommendations ✨' : 'Note quelques dates (12+/20) pour débloquer des recommandations personnalisées ✨',
         })
       }
 
@@ -124,7 +129,7 @@ Réponds UNIQUEMENT avec ce JSON, sans texte avant ou après :
       },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: prompt + langInstruction }],
         temperature: 0.9,
         max_tokens: 600,
       }),

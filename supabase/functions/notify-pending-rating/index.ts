@@ -30,16 +30,20 @@ Deno.serve(async (req) => {
   const userIds = [...new Set(dates.map((d: any) => d.user_id))]
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, expo_push_token')
+    // select('*') : la colonne « langue » peut ne pas exister tant que la migration n'est pas passée (→ français)
+    .select('*')
     .in('id', userIds)
 
   const tokenMap: Record<string, string> = {}
+  const englishIds = new Set<string>()
   for (const p of profiles ?? []) {
     if (p.expo_push_token) tokenMap[p.id] = p.expo_push_token
+    if ((p as any).langue === 'en') englishIds.add(p.id)
   }
 
   let sent = 0
   for (const date of dates as any[]) {
+    const en = englishIds.has(date.user_id)
     const token = tokenMap[date.user_id]
     if (!token) continue
     const lieu = date.intitule ?? date.lieu
@@ -48,8 +52,8 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: token,
-        title: '✍️ Comment c\'était ?',
-        body: `N'oublie pas de noter "${lieu}"`,
+        title: en ? '✍️ How was it?' : '✍️ Comment c\'était ?',
+        body: en ? `Don't forget to rate "${lieu}"` : `N'oublie pas de noter "${lieu}"`,
         sound: 'default',
       }),
     })

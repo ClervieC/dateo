@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t, tn } from '../lib/i18n'
 
 type LeaderEntry = {
   id: string
@@ -73,14 +75,7 @@ export default function Leaderboard() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Classement</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title={t("Classement")} />
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
@@ -90,12 +85,12 @@ export default function Leaderboard() {
           data={ranked}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
-            <Text style={styles.subtitle}>Classement par moyenne des dates vécus</Text>
+            <Text style={styles.subtitle}>{t("Toi et tes amis, classés par note moyenne de vos dates")}</Text>
           }
           ListFooterComponent={
             unranked.length > 0 ? (
               <View>
-                <Text style={styles.unrankedTitle}>Pas encore classés</Text>
+                <Text style={styles.unrankedTitle}>{t("Pas encore classés")}</Text>
                 {unranked.map((item) => (
                   <View key={item.id} style={[styles.row, styles.rowUnranked, item.isMe && styles.rowMe]}>
                     <Text style={styles.rank}>—</Text>
@@ -108,9 +103,9 @@ export default function Leaderboard() {
                     )}
                     <View style={styles.info}>
                       <Text style={[styles.username, item.isMe && styles.usernameMe]}>
-                        @{item.username}{item.isMe ? ' (toi)' : ''}
+                        @{item.username}{item.isMe ? t(" (toi)") : ''}
                       </Text>
-                      <Text style={styles.meta}>Aucun date vécu pour l'instant</Text>
+                      <Text style={styles.meta}>{t("Aucun date vécu pour l'instant")}</Text>
                     </View>
                   </View>
                 ))}
@@ -121,12 +116,19 @@ export default function Leaderboard() {
             unranked.length === 0 ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyIcon}>🏆</Text>
-                <Text style={styles.emptyText}>Ajoute des amis pour voir le classement</Text>
+                <Text style={styles.emptyText}>{t("Ajoute des amis pour voir le classement")}</Text>
+                <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/friends')}>
+                  <Text style={styles.emptyCtaText}>{t("Trouver mes amis")}</Text>
+                </TouchableOpacity>
               </View>
             ) : null
           }
           renderItem={({ item, index }) => (
-            <View style={[styles.row, item.isMe && styles.rowMe]}>
+            <TouchableOpacity
+              style={[styles.row, item.isMe && styles.rowMe]}
+              onPress={() => router.push(item.isMe ? '/(tabs)/profile' : `/user/${item.id}`)}
+              activeOpacity={0.8}
+            >
               <Text style={styles.rank}>{MEDALS[index] ?? `#${index + 1}`}</Text>
               {item.avatar_url ? (
                 <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
@@ -137,12 +139,12 @@ export default function Leaderboard() {
               )}
               <View style={styles.info}>
                 <Text style={[styles.username, item.isMe && styles.usernameMe]}>
-                  @{item.username}{item.isMe ? ' (toi)' : ''}
+                  @{item.username}{item.isMe ? t(" (toi)") : ''}
                 </Text>
-                <Text style={styles.meta}>{item.count} date{item.count !== 1 ? 's' : ''} vécus</Text>
+                <Text style={styles.meta}>{tn(item.count, "{n} date vécu", "{n} dates vécus")}</Text>
               </View>
               <Text style={styles.score}>{item.moyenne.toFixed(1)}/20</Text>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -152,6 +154,8 @@ export default function Leaderboard() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF8F5' },
+  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16 },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0D9D9' },
   backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
   back: { color: '#D4517E', fontSize: 16, fontWeight: '500' },

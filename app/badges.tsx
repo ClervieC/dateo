@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 import { webContentStyle } from '../lib/webStyles'
 import { computeBadges } from '../lib/badges'
 import { formaterDate } from '../lib/dateUtils'
+import { ScreenHeader } from '../lib/ScreenHeader'
+import { t } from '../lib/i18n'
 
 export default function Badges() {
   const [badges, setBadges] = useState<ReturnType<typeof computeBadges>>([])
@@ -60,32 +62,25 @@ export default function Badges() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color="#D4517E" />
-          <Text style={styles.back}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Badges</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      <ScreenHeader fallback="/(tabs)/profile" title="Badges" />
 
       {loading ? (
         <ActivityIndicator color="#D4517E" style={{ marginTop: 60 }} size="large" />
       ) : (
         <ScrollView contentContainerStyle={[styles.content, webContentStyle]}>
-          <Text style={styles.progress}>{unlocked.length} / {badges.length} débloqués</Text>
+          <Text style={styles.progress}>{t("{fait} / {total} débloqués", { fait: unlocked.length, total: badges.length })}</Text>
 
           {unlocked.length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>Débloqués ✓</Text>
+              <Text style={styles.sectionLabel}>{t("Débloqués ✓")}</Text>
               <View style={styles.grid}>
                 {unlocked.map((b) => (
                   <View key={b.id} style={styles.badge}>
                     <Text style={styles.badgeEmoji}>{b.emoji}</Text>
-                    <Text style={styles.badgeLabel}>{b.label}</Text>
-                    <Text style={styles.badgeDesc}>{b.desc}</Text>
+                    <Text style={styles.badgeLabel}>{t(b.label)}</Text>
+                    <Text style={styles.badgeDesc}>{t(b.desc)}</Text>
                     {b.unlockedAt && (
-                      <Text style={styles.badgeUnlockedAt}>Obtenu le {formaterDate(b.unlockedAt)}</Text>
+                      <Text style={styles.badgeUnlockedAt}>{t("Obtenu le {date}", { date: formaterDate(b.unlockedAt.slice(0, 10)) })}</Text>
                     )}
                   </View>
                 ))}
@@ -95,13 +90,13 @@ export default function Badges() {
 
           {locked.length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>À débloquer</Text>
+              <Text style={styles.sectionLabel}>{t("À débloquer")}</Text>
               <View style={styles.grid}>
                 {locked.map((b) => (
                   <View key={b.id} style={[styles.badge, styles.badgeLocked]}>
                     <Text style={styles.badgeEmoji}>{b.emoji}</Text>
-                    <Text style={[styles.badgeLabel, styles.badgeLabelLocked]}>{b.label}</Text>
-                    <Text style={styles.badgeDesc}>{b.desc}</Text>
+                    <Text style={[styles.badgeLabel, styles.badgeLabelLocked]}>{t(b.label)}</Text>
+                    <Text style={styles.badgeDesc}>{t(b.desc)}</Text>
                     {b.target !== undefined && (
                       <>
                         <View style={styles.badgeProgressTrack}>

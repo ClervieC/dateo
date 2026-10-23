@@ -1,41 +1,30 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native'
+import { Text, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { usernameValide } from '../../lib/friendsUtils'
-import { webFormStyle, webAuthCardStyle } from '../../lib/webStyles'
+import { FormField } from '../../lib/FormField'
+import { AuthScreen, authStyles } from '../../lib/AuthScreen'
+import { useUsernameCheck } from '../../lib/useUsernameCheck'
+import { t } from '../../lib/i18n'
 
 export default function UsernameSetup() {
   const [username, setUsername] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const router = useRouter()
+  const check = useUsernameCheck(username)
 
   async function handleSave() {
     setError('')
-
     const validation = usernameValide(username)
-    if (!validation.valide) {
-      setError(validation.message ?? 'Pseudo invalide')
-      return
-    }
+    if (!validation.valide) { setError(validation.message ?? t("Pseudo invalide")); return }
+    if (check.status === 'taken') { setError(check.message); return }
 
     setSaving(true)
-
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username.trim())
-      .maybeSingle()
-
-    if (existing) {
-      setSaving(false)
-      setError('Ce pseudo est déjà pris')
-      return
-    }
-
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSaving(false); return }
+    if (!user) { setSaving(false); router.replace('/(auth)/login'); return }
 
     const { error: updateError } = await supabase
       .from('profiles')
@@ -43,55 +32,44 @@ export default function UsernameSetup() {
       .eq('id', user.id)
 
     setSaving(false)
-
     if (updateError) {
-      setError(updateError.message)
+      setError(updateError.code === '23505' ? t("Ce pseudo est déjà pris") : t("Impossible d'enregistrer ton pseudo, réessaie."))
       return
     }
-
     router.replace('/onboarding')
   }
 
+  const hint =
+    check.status === 'checking' ? t("Vérification…")
+    : check.status === 'available' ? t("✓ Pseudo disponible")
+    : t("Lettres, chiffres, points et _ — 3 caractères minimum")
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.outer}>
-        <View style={[styles.form, webFormStyle, webAuthCardStyle]}>
-          <Image source={require('../../assets/logoVertical.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>Choisis ton pseudo</Text>
-          <Text style={styles.subtitle}>Visible par tes amis sur Dateo</Text>
+    <AuthScreen title={t("Choisis ton pseudo")} subtitle={t("C'est grâce à lui que tes amis te retrouveront sur Dateo")} compactLogo>
+      <FormField
+        label={t("Pseudo")}
+        placeholder={t("ex : clervie.d")}
+        value={username}
+        onChangeText={(v) => { setUsername(v); setError('') }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+        returnKeyType="done"
+        onSubmitEditing={handleSave}
+        error={error || (check.status === 'taken' || (check.status === 'invalid' && username.trim().length >= 3) ? check.message : undefined)}
+        hint={hint}
+        right={check.status === 'checking'
+          ? <ActivityIndicator size="small" color="#D4517E" />
+          : check.status === 'available' ? <Ionicons name="checkmark-circle" size={20} color="#3B6D11" /> : null}
+      />
 
-          <TextInput
-            style={styles.input}
-            placeholder="ex : clervie.d"
-            placeholderTextColor="#B8A9A0"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoFocus
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity style={styles.button} onPress={handleSave} disabled={saving}>
-            {saving
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>Continuer</Text>
-            }
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+      <TouchableOpacity
+        style={[authStyles.button, (saving || check.status === 'taken') && authStyles.buttonDisabled]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Continuer")}</Text>}
+      </TouchableOpacity>
+    </AuthScreen>
   )
 }
-
-const styles = StyleSheet.create({
-  outer: { flex: 1, justifyContent: 'center', backgroundColor: '#FFF8F5' },
-  form: { padding: 24 },
-  logo: { height: 120, width: 101, maxWidth: '100%', alignSelf: 'center', marginBottom: 4 },
-  title: { fontSize: 26, fontWeight: '700', color: '#D4517E', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
-  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9', fontSize: 16 },
-  button: { backgroundColor: '#D4517E', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  error: { color: '#D85A30', textAlign: 'center', marginBottom: 8 },
-})

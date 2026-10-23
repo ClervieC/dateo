@@ -11,7 +11,10 @@
     "vercel-build": "expo export -p web"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "setupFiles": [
+      "./jest.setup.js"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

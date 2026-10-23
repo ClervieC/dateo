@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Alert, Image, ScrollView, Modal, KeyboardAvoidingView, Platform, Switch, Share } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, Image, ScrollView, Modal, KeyboardAvoidingView, Platform, Switch, Share } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { NotificationBell } from '../../lib/NotificationBell'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -8,21 +8,17 @@ import Slider from '@react-native-community/slider'
 import * as ImagePicker from 'expo-image-picker'
 import { uriToBlob } from '../../lib/uploadImage'
 import { supabase } from '../../lib/supabase'
-import { calculerMoyenne, trouverMeilleurLieu, formaterDate } from '../../lib/dateUtils'
+import { calculerMoyenne, trouverMeilleurLieu, formaterDate, formatNote, nomsDesMois, initialesJours } from '../../lib/dateUtils'
+import { CRITERES } from '../../lib/criteres'
+import { showAlert, confirmAction } from '../../lib/alert'
+import { saveRatings } from '../../lib/ratings'
 import { DatePicker } from '../../lib/DatePicker'
 import { webContentStyle } from '../../lib/webStyles'
 import { PhotoViewer } from '../../lib/PhotoViewer'
 import { CATEGORIES, getCategoryLabel } from '../../lib/categories'
+import { useBottomTabs } from '../../lib/useBottomTabs'
+import { t, tn } from '../../lib/i18n'
 
-const CRITERES = [
-  { key: 'mood', label: 'Mood' },
-  { key: 'nourriture', label: 'Nourriture' },
-  { key: 'ambiance', label: 'Ambiance' },
-  { key: 'personne', label: 'La personne' },
-  { key: 'conversation', label: 'Conversation' },
-  { key: 'prix', label: 'Prix / Valeur' },
-  { key: 'envie_recommencer', label: 'Envie de recommencer' },
-]
 
 const MAX_PHOTOS = 10
 
@@ -98,6 +94,8 @@ export default function Profile() {
   const [selectedCompanionIds, setSelectedCompanionIds] = useState<Set<string>>(new Set())
   const [planifieModalVisible, setPlanifieModalVisible] = useState(false)
   const router = useRouter()
+  // Cloche dans l'en-tête sur téléphone ; sur ordinateur elle est dans la barre du haut
+  const showBell = useBottomTabs()
   const userIdRef = useRef('')
   const editOriginalPhotosRef = useRef<string[]>([])
   const editOriginalParticipantIdsRef = useRef<Set<string>>(new Set())
@@ -191,7 +189,7 @@ export default function Profile() {
       lieu: item.lieu,
       dateIso: item.date_du_date,
       statut: item.statut ?? 'vecu',
-      noteGlobale: item.note_globale,
+      noteGlobale: item.note_globale ?? 10,
       commentaire: item.commentaire ?? '',
       ratings: { mood: 3, nourriture: 3, ambiance: 3, personne: 3, conversation: 3, prix: 3, envie_recommencer: 3 },
       conseilVivement: item.conseil_vivement,
@@ -237,7 +235,7 @@ export default function Profile() {
     const totalKept = editData.keptPhotoUrls.length + editData.newPhotoUris.length
     const remaining = MAX_PHOTOS - totalKept
     if (remaining <= 0) {
-      Alert.alert('Limite atteinte', `Tu peux avoir ${MAX_PHOTOS} photos maximum`)
+      showAlert(t("Limite atteinte"), t("Tu peux avoir {n} photos maximum", { n: MAX_PHOTOS }))
       return
     }
 
@@ -259,15 +257,13 @@ export default function Profile() {
 
   async function handleSaveEdit() {
     if (saving) return
-    if (!editData.lieu.trim()) { Alert.alert('Oups', 'Indique le lieu du date'); return }
+    if (!editData.lieu.trim()) { showAlert(t("Oups"), t("Indique le lieu du date")); return }
     if (!editingDate) return
 
     setSaving(true)
 
-    // Si le date était planifié et qu'une note est saisie, il devient vécu
-    const statutFinal = (editData.statut === 'planifie' && editData.noteGlobale != null)
-      ? 'vecu'
-      : editData.statut
+    // Le passage planifié → vécu se fait explicitement via « Marquer comme vécu »
+    const statutFinal = editData.statut
 
     const { data: updatedDate, error: dateError } = await supabase
       .from('dates')
@@ -275,7 +271,7 @@ export default function Profile() {
         intitule: editData.intitule.trim() || null,
         lieu: editData.lieu.trim(),
         date_du_date: editData.dateIso,
-        note_globale: editData.noteGlobale,
+        note_globale: statutFinal === 'vecu' ? Math.round(editData.noteGlobale * 4) / 4 : null,
         commentaire: editData.commentaire.trim() || null,
         statut: statutFinal,
         categorie: editData.categorie,
@@ -286,13 +282,13 @@ export default function Profile() {
 
     if (dateError) {
       setSaving(false)
-      Alert.alert('Erreur modification', dateError.message)
+      showAlert(t("Impossible de modifier ce date"), dateError.message)
       return
     }
 
     if (!updatedDate || updatedDate.length === 0) {
       setSaving(false)
-      Alert.alert('Erreur', 'Impossible de modifier ce date. Vérifie les policies RLS dans Supabase (UPDATE sur dates).')
+      showAlert(t("Impossible de modifier ce date"), t("Réessaie dans un instant."))
       return
     }
 
@@ -301,18 +297,7 @@ export default function Profile() {
       .update({ conseil_vivement: editData.conseilVivement })
       .eq('id', editingDate.id)
 
-    await supabase.from('ratings').update({
-      mood: editData.ratings.mood,
-      nourriture: editData.ratings.nourriture,
-      ambiance: editData.ratings.ambiance,
-      personne: editData.ratings.personne,
-    }).eq('date_id', editingDate.id)
-
-    await supabase.from('ratings').update({
-      conversation: editData.ratings.conversation,
-      prix: editData.ratings.prix,
-      envie_recommencer: editData.ratings.envie_recommencer,
-    }).eq('date_id', editingDate.id)
+    if (statutFinal === 'vecu') await saveRatings(editingDate.id, editData.ratings)
 
     const deletedUrls = editOriginalPhotosRef.current.filter(
       (url) => !editData.keptPhotoUrls.includes(url)
@@ -378,7 +363,7 @@ export default function Profile() {
     }
 
     setUploadingPhotos(false)
-    if (failCount > 0) Alert.alert('Attention', `${failCount} photo(s) n'ont pas pu être uploadées`)
+    if (failCount > 0) showAlert(t("Attention"), t("{n} photo(s) n'ont pas pu être envoyée(s)", { n: failCount }))
   }
 
   async function execDelete(id: string) {
@@ -389,7 +374,7 @@ export default function Profile() {
     if (photosError) {
       setDeleting(false)
       setConfirmDeleteId(null)
-      Alert.alert('Erreur suppression photos', photosError.message)
+      showAlert(t("Impossible de supprimer ce date"), photosError.message)
       return
     }
 
@@ -398,7 +383,7 @@ export default function Profile() {
     if (ratingsError) {
       setDeleting(false)
       setConfirmDeleteId(null)
-      Alert.alert('Erreur suppression ratings', ratingsError.message)
+      showAlert(t("Impossible de supprimer ce date"), ratingsError.message)
       return
     }
 
@@ -408,13 +393,15 @@ export default function Profile() {
     setDeleting(false)
     setConfirmDeleteId(null)
 
-    if (error) Alert.alert('Erreur suppression', error.message)
-    else if (!deleted || deleted.length === 0) Alert.alert('Erreur', 'Suppression impossible (RLS). Exécute dans Supabase :\n\nCREATE POLICY "dates_delete_own" ON dates FOR DELETE USING (auth.uid() = user_id);')
+    if (error) showAlert(t("Impossible de supprimer ce date"), error.message)
+    else if (!deleted || deleted.length === 0) showAlert(t("Impossible de supprimer ce date"), t("Réessaie dans un instant."))
     else loadData()
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
+  function handleSignOut() {
+    confirmAction(t("Se déconnecter ?"), t("Tu pourras te reconnecter avec ton email et ton mot de passe."), t("Se déconnecter"), () => {
+      supabase.auth.signOut()
+    })
   }
 
 
@@ -448,8 +435,8 @@ export default function Profile() {
   const meilleurLieu = trouverMeilleurLieu(vecuDates)
   const editPhotoCount = editData.keptPhotoUrls.length + editData.newPhotoUris.length
 
-  const CAL_MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
-  const CAL_DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+  const CAL_MOIS = nomsDesMois('long')
+  const CAL_DOW = initialesJours()
 
   const calDateSet = useMemo(() => new Set(
     vecuDates
@@ -477,7 +464,7 @@ export default function Profile() {
   }, [viewMode, vecuDates, calMonth, selectedDay, filteredVecu])
 
   async function shareProfile() {
-    await Share.share({ message: `Rejoins-moi sur Dateo ! Mon profil : @${username}` })
+    await Share.share({ message: t("Rejoins-moi sur Dateo ! Mon profil : @{username}", { username }) })
   }
 
   function renderPlanifieCard(item: DateRow) {
@@ -495,28 +482,28 @@ export default function Profile() {
             )}
           </View>
           <View style={styles.planifieBadge}>
-            <Text style={styles.planifieText}>Planifié</Text>
+            <Text style={styles.planifieText}>{t("Planifié")}</Text>
           </View>
         </View>
         <Text style={styles.dateDate}>{formaterDate(item.date_du_date)}</Text>
         {item.commentaire ? <Text style={styles.dateComment} numberOfLines={2}>{item.commentaire}</Text> : null}
         {confirmDeleteId === item.id ? (
           <View style={styles.dateActions}>
-            <Text style={styles.confirmText}>Supprimer ce date ?</Text>
+            <Text style={styles.confirmText}>{t("Supprimer ce date ?")}</Text>
             <TouchableOpacity style={styles.deleteBtn} onPress={() => execDelete(item.id)} disabled={deleting}>
-              <Text style={styles.deleteBtnText}>{deleting ? '...' : 'Oui'}</Text>
+              <Text style={styles.deleteBtnText}>{deleting ? '...' : t("Oui")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.editBtn} onPress={() => setConfirmDeleteId(null)}>
-              <Text style={styles.editBtnText}>Non</Text>
+              <Text style={styles.editBtnText}>{t("Non")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.dateActions}>
             <TouchableOpacity style={styles.editBtn} onPress={() => { setPlanifieModalVisible(false); openEdit(item) }}>
-              <Text style={styles.editBtnText}>Modifier</Text>
+              <Text style={styles.editBtnText}>{t("Modifier")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
-              <Text style={styles.deleteBtnText}>Supprimer</Text>
+              <Text style={styles.deleteBtnText}>{t("Supprimer")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -536,20 +523,20 @@ export default function Profile() {
         ListHeaderComponent={
           <View>
             <View style={styles.profileHeader}>
-              <Text style={styles.title}>Profil</Text>
+              <Text style={styles.title}>{t("Profil")}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                {Platform.OS !== 'web' && <NotificationBell style={styles.settingsBtn} />}
-                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
-                  <Text style={styles.settingsBtnText}>⚙️</Text>
+                {showBell && <NotificationBell style={styles.settingsBtn} />}
+                <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn} accessibilityLabel={t("Paramètres")}>
+                  <Ionicons name="settings-outline" size={22} color="#D4517E" />
                 </TouchableOpacity>
               </View>
             </View>
 
             {loadError && (
               <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>Impossible de charger tes dates. Vérifie ta connexion.</Text>
+                <Text style={styles.errorBannerText}>{t("Impossible de charger tes dates. Vérifie ta connexion.")}</Text>
                 <TouchableOpacity onPress={loadData}>
-                  <Text style={styles.errorBannerRetry}>Réessayer</Text>
+                  <Text style={styles.errorBannerRetry}>{t("Réessayer")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -570,39 +557,40 @@ export default function Profile() {
               </View>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickLinks} contentContainerStyle={{ gap: 10, paddingRight: 8 }}>
+            {/* Grille plutôt qu'une bande qui défile : les 10 raccourcis restent visibles sur un téléphone */}
+            <View style={styles.quickLinks}>
               {[
-                { icon: 'people-outline' as const, label: 'Amis', onPress: () => router.push('/friends') },
-                { icon: 'stats-chart-outline' as const, label: 'Stats', onPress: () => router.push('/stats') },
-                { icon: 'sparkles-outline' as const, label: 'Récap', onPress: () => router.push('/recap') },
-                { icon: 'heart-outline' as const, label: 'Couple', onPress: () => router.push('/couple') },
-                { icon: 'trophy-outline' as const, label: 'Classement', onPress: () => router.push('/leaderboard') },
-                { icon: 'ribbon-outline' as const, label: 'Badges', onPress: () => router.push('/badges') },
-                { icon: 'search-outline' as const, label: 'Recherche', onPress: () => router.push('/search') },
-                { icon: 'bookmark-outline' as const, label: 'Favoris', onPress: () => router.push('/favorites') },
-                { icon: 'location-outline' as const, label: 'À essayer', onPress: () => router.push('/wishlist') },
-                { icon: 'share-social-outline' as const, label: 'Partager', onPress: shareProfile },
+                { icon: 'people-outline' as const, label: t("Amis"), onPress: () => router.push('/friends') },
+                { icon: 'stats-chart-outline' as const, label: t("Stats"), onPress: () => router.push('/stats') },
+                { icon: 'sparkles-outline' as const, label: t("Récap"), onPress: () => router.push('/recap') },
+                { icon: 'heart-outline' as const, label: t("Couple"), onPress: () => router.push('/couple') },
+                { icon: 'trophy-outline' as const, label: t("Classement"), onPress: () => router.push('/leaderboard') },
+                { icon: 'ribbon-outline' as const, label: t("Badges"), onPress: () => router.push('/badges') },
+                { icon: 'search-outline' as const, label: t("Recherche"), onPress: () => router.push('/search') },
+                { icon: 'bookmark-outline' as const, label: t("Favoris"), onPress: () => router.push('/favorites') },
+                { icon: 'location-outline' as const, label: t("À essayer"), onPress: () => router.push('/wishlist') },
+                { icon: 'share-social-outline' as const, label: t("Partager"), onPress: shareProfile },
               ].map((item) => (
                 <TouchableOpacity key={item.label} style={styles.quickLink} onPress={item.onPress}>
                   <Ionicons name={item.icon} size={20} color="#D4517E" />
-                  <Text style={styles.quickLinkText}>{item.label}</Text>
+                  <Text style={styles.quickLinkText} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
 
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Dates vécus</Text>
+                <Text style={styles.statLabel}>{t("Dates vécus")}</Text>
                 <Text style={styles.statValue}>{vecuDates.length}</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Moyenne</Text>
+                <Text style={styles.statLabel}>{t("Moyenne")}</Text>
                 <Text style={styles.statValue}>{moyenne}/20</Text>
               </View>
             </View>
 
             <View style={styles.statCardFull}>
-              <Text style={styles.statLabel}>Meilleur date</Text>
+              <Text style={styles.statLabel}>{t("Meilleur date")}</Text>
               <Text style={styles.statValueSmall}>{meilleurLieu}</Text>
             </View>
 
@@ -615,15 +603,15 @@ export default function Profile() {
               return (
                 <View style={styles.goalCard}>
                   <View style={styles.goalHeader}>
-                    <Text style={styles.goalLabel}>🎯 Objectif du mois</Text>
-                    <Text style={styles.goalCount}>{thisMonthCount}/{monthlyGoal} dates</Text>
+                    <Text style={styles.goalLabel}>{t("🎯 Objectif du mois")}</Text>
+                    <Text style={styles.goalCount}>{t("{fait}/{objectif} dates", { fait: thisMonthCount, objectif: monthlyGoal })}</Text>
                   </View>
                   <View style={styles.goalTrack}>
                     <View style={[styles.goalFill, { flex: pct }]} />
                     {pct < 1 && <View style={{ flex: 1 - pct }} />}
                   </View>
                   {thisMonthCount >= monthlyGoal && (
-                    <Text style={styles.goalDone}>🎉 Objectif atteint !</Text>
+                    <Text style={styles.goalDone}>{t("🎉 Objectif atteint !")}</Text>
                   )}
                 </View>
               )
@@ -636,11 +624,11 @@ export default function Profile() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.planifieSummaryTitle}>
-                    {filteredPlanifie.length} date{filteredPlanifie.length > 1 ? 's' : ''} planifié{filteredPlanifie.length > 1 ? 's' : ''}
+                    {tn(filteredPlanifie.length, "{n} date planifié", "{n} dates planifiés")}
                   </Text>
                   <Text style={styles.planifieSummarySub} numberOfLines={1}>
                     {filteredPlanifie[0].intitule ?? filteredPlanifie[0].lieu}
-                    {filteredPlanifie.length > 1 ? ` +${filteredPlanifie.length - 1} autre${filteredPlanifie.length > 2 ? 's' : ''}` : ''}
+                    {filteredPlanifie.length > 1 ? ` ${tn(filteredPlanifie.length - 1, "+{n} autre", "+{n} autres")}` : ''}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#B8A9A0" />
@@ -650,7 +638,7 @@ export default function Profile() {
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Rechercher un date..."
+                placeholder={t("Rechercher un date...")}
                 placeholderTextColor="#B8A9A0"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -663,7 +651,7 @@ export default function Profile() {
                 style={[styles.catFilterChip, filterCategorie === null && styles.catFilterChipActive]}
                 onPress={() => setFilterCategorie(null)}
               >
-                <Text style={[styles.catFilterText, filterCategorie === null && styles.catFilterTextActive]}>Tous</Text>
+                <Text style={[styles.catFilterText, filterCategorie === null && styles.catFilterTextActive]}>{t("Tous")}</Text>
               </TouchableOpacity>
               {CATEGORIES.map((cat) => (
                 <TouchableOpacity
@@ -672,7 +660,7 @@ export default function Profile() {
                   onPress={() => setFilterCategorie(filterCategorie === cat.key ? null : cat.key)}
                 >
                   <Text style={[styles.catFilterText, filterCategorie === cat.key && styles.catFilterTextActive]}>
-                    {cat.emoji} {cat.label}
+                    {cat.emoji} {t(cat.label)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -685,13 +673,13 @@ export default function Profile() {
                   style={[styles.advChip, filterNoteMin === n && styles.advChipActive]}
                   onPress={() => setFilterNoteMin(n)}
                 >
-                  <Text style={[styles.advChipText, filterNoteMin === n && styles.advChipTextActive]}>{n > 0 ? `≥${n}/20` : 'Toute note'}</Text>
+                  <Text style={[styles.advChipText, filterNoteMin === n && styles.advChipTextActive]}>{n > 0 ? `≥${n}/20` : t("Toute note")}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
             <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>Historique ({vecuDates.length})</Text>
+              <Text style={styles.sectionTitle}>{t("Historique")} ({vecuDates.length})</Text>
               <View style={styles.viewToggle}>
                 <TouchableOpacity
                   style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
@@ -736,21 +724,30 @@ export default function Profile() {
                 </View>
                 {selectedDay && (
                   <TouchableOpacity onPress={() => setSelectedDay(null)} style={styles.calClear}>
-                    <Text style={styles.calClearText}>× Effacer la sélection</Text>
+                    <Text style={styles.calClearText}>{t("× Effacer la sélection")}</Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
 
             {loading && <ActivityIndicator color="#D4517E" style={{ marginTop: 20 }} />}
-            {!loading && vecuDates.length === 0 && <Text style={styles.empty}>Aucun date noté pour l'instant</Text>}
+            {!loading && vecuDates.length === 0 && (
+              <View style={styles.emptyBox}>
+                <Text style={styles.emptyIcon}>📝</Text>
+                <Text style={styles.emptyTitle}>{t("Aucun date noté pour l'instant")}</Text>
+                <Text style={styles.emptySub}>{t("Note ta première sortie pour commencer ton historique")}</Text>
+                <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/(tabs)/rate')}>
+                  <Text style={styles.emptyCtaText}>{t("Noter un date")}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         }
         renderItem={({ item }) => (
           <View style={styles.dateCard}>
             {item.conseil_vivement && (
               <View style={styles.conseilBadge}>
-                <Text style={styles.conseilBadgeText}>💖 Conseillé vivement</Text>
+                <Text style={styles.conseilBadgeText}>{t("💖 Conseillé vivement")}</Text>
               </View>
             )}
             <View style={styles.dateCardHeader}>
@@ -782,21 +779,21 @@ export default function Profile() {
 
             {confirmDeleteId === item.id ? (
               <View style={styles.dateActions}>
-                <Text style={styles.confirmText}>Supprimer ce date ?</Text>
+                <Text style={styles.confirmText}>{t("Supprimer ce date ?")}</Text>
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => execDelete(item.id)} disabled={deleting}>
-                  <Text style={styles.deleteBtnText}>{deleting ? '...' : 'Oui'}</Text>
+                  <Text style={styles.deleteBtnText}>{deleting ? '...' : t("Oui")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.editBtn} onPress={() => setConfirmDeleteId(null)}>
-                  <Text style={styles.editBtnText}>Non</Text>
+                  <Text style={styles.editBtnText}>{t("Non")}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.dateActions}>
                 <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
-                  <Text style={styles.editBtnText}>Modifier</Text>
+                  <Text style={styles.editBtnText}>{t("Modifier")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
-                  <Text style={styles.deleteBtnText}>Supprimer</Text>
+                  <Text style={styles.deleteBtnText}>{t("Supprimer")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -804,12 +801,12 @@ export default function Profile() {
         )}
         ListEmptyComponent={
           !loading && searchQuery.trim() ? (
-            <Text style={styles.empty}>Aucun résultat pour "{searchQuery}"</Text>
+            <Text style={styles.empty}>{t("Aucun résultat pour « {q} »", { q: searchQuery })}</Text>
           ) : null
         }
         ListFooterComponent={
           <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-            <Text style={styles.signOutText}>Se déconnecter</Text>
+            <Text style={styles.signOutText}>{t("Se déconnecter")}</Text>
           </TouchableOpacity>
         }
       />
@@ -828,11 +825,11 @@ export default function Profile() {
           <SafeAreaView style={styles.modalSafe} edges={['top']}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setEditModal(false)}>
-                <Text style={styles.modalCancel}>Annuler</Text>
+                <Text style={styles.modalCancel}>{t("Annuler")}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Modifier le date</Text>
+              <Text style={styles.modalTitle}>{t("Modifier le date")}</Text>
               <TouchableOpacity onPress={handleSaveEdit} disabled={saving || uploadingPhotos}>
-                <Text style={styles.modalSave}>{saving ? '...' : 'Enregistrer'}</Text>
+                <Text style={styles.modalSave}>{saving ? '...' : t("Enregistrer")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -842,40 +839,40 @@ export default function Profile() {
                   style={styles.marquerVecuBtn}
                   onPress={() => setEditData((prev) => ({ ...prev, statut: 'vecu' }))}
                 >
-                  <Text style={styles.marquerVecuText}>✓ Marquer comme vécu</Text>
+                  <Text style={styles.marquerVecuText}>{t("✓ Marquer comme vécu")}</Text>
                 </TouchableOpacity>
               )}
               {editData.statut === 'vecu' && editingDate?.statut === 'planifie' && (
                 <View style={styles.vecuBanner}>
-                  <Text style={styles.vecuBannerText}>✓ Ce date sera déplacé dans l'historique</Text>
+                  <Text style={styles.vecuBannerText}>{t("✓ Ce date sera déplacé dans l'historique")}</Text>
                 </View>
               )}
 
-              <Text style={styles.label}>Intitulé <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+              <Text style={styles.label}>{t("Intitulé")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
               <TextInput
                 style={styles.input}
                 value={editData.intitule}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, intitule: v }))}
-                placeholder="Ex : Dîner romantique, Soirée ciné..."
+                placeholder={t("Ex : Dîner romantique, Soirée ciné...")}
                 placeholderTextColor="#B8A9A0"
               />
 
-              <Text style={styles.label}>Lieu</Text>
+              <Text style={styles.label}>{t("Lieu")}</Text>
               <TextInput
                 style={styles.input}
                 value={editData.lieu}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, lieu: v }))}
-                placeholder="Lieu du date"
+                placeholder={t("Lieu du date")}
                 placeholderTextColor="#B8A9A0"
               />
 
-              <Text style={styles.label}>Date</Text>
+              <Text style={styles.label}>{t("Date")}</Text>
               <DatePicker
                 value={editData.dateIso}
                 onChange={(iso) => setEditData((prev) => ({ ...prev, dateIso: iso }))}
               />
 
-              <Text style={styles.label}>Catégorie <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+              <Text style={styles.label}>{t("Catégorie")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
               <View style={styles.categoryRow}>
                 {CATEGORIES.map((cat) => (
                   <TouchableOpacity
@@ -884,15 +881,16 @@ export default function Profile() {
                     onPress={() => setEditData((prev) => ({ ...prev, categorie: prev.categorie === cat.key ? null : cat.key }))}
                   >
                     <Text style={[styles.categoryChipText, editData.categorie === cat.key && styles.categoryChipTextActive]}>
-                      {cat.emoji} {cat.label}
+                      {cat.emoji} {t(cat.label)}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
+              {editData.statut === 'vecu' && (<>
               <View style={styles.globalNoteBox}>
-                <Text style={styles.label}>Note globale</Text>
-                <Text style={styles.globalNoteValue}>{editData.noteGlobale}/20</Text>
+                <Text style={styles.label}>{t("Note globale")}</Text>
+                <Text style={styles.globalNoteValue}>{formatNote(editData.noteGlobale)}/20</Text>
                 <Slider
                   style={{ width: '100%', height: 40 }}
                   minimumValue={0} maximumValue={20} step={0.25}
@@ -902,15 +900,15 @@ export default function Profile() {
                 />
               </View>
 
-              <Text style={styles.sectionTitle}>Détails</Text>
+              <Text style={styles.sectionTitle}>{t("Détails")}</Text>
               {loadingEditData ? (
                 <ActivityIndicator color="#D4517E" style={{ marginVertical: 12 }} />
               ) : (
                 CRITERES.map((c) => (
                   <View key={c.key} style={styles.critereBox}>
                     <View style={styles.critereHeader}>
-                      <Text style={styles.label}>{c.label}</Text>
-                      <Text style={styles.critereValue}>{editData.ratings[c.key as keyof EditRatings]}/5</Text>
+                      <Text style={styles.label}>{t(c.label)}</Text>
+                      <Text style={styles.critereValue}>{formatNote(editData.ratings[c.key as keyof EditRatings])}/5</Text>
                     </View>
                     <Slider
                       style={{ width: '100%', height: 36 }}
@@ -930,9 +928,9 @@ export default function Profile() {
               >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.conseilLabel, editData.conseilVivement && styles.conseilLabelActive]}>
-                    💖 Je conseille vivement
+                    {t("💖 Je conseille vivement")}
                   </Text>
-                  <Text style={styles.conseilSubtext}>Mis en avant sur le feed de tes amis</Text>
+                  <Text style={styles.conseilSubtext}>{t("Mis en avant sur le feed de tes amis")}</Text>
                 </View>
                 <Switch
                   value={editData.conseilVivement}
@@ -942,28 +940,29 @@ export default function Profile() {
                   ios_backgroundColor="#F0D9D9"
                 />
               </TouchableOpacity>
+              </>)}
 
               <View style={styles.visibiliteRow}>
                 <TouchableOpacity
                   style={[styles.statutBtn, editData.visibilite === 'friends' && styles.statutBtnActive]}
                   onPress={() => setEditData((prev) => ({ ...prev, visibilite: 'friends' }))}
                 >
-                  <Text style={[styles.statutBtnText, editData.visibilite === 'friends' && styles.statutBtnTextActive]}>👫 Visible par mes amis</Text>
+                  <Text style={[styles.statutBtnText, editData.visibilite === 'friends' && styles.statutBtnTextActive]}>{t("👫 Visible par mes amis")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.statutBtn, editData.visibilite === 'private' && styles.statutBtnActive]}
                   onPress={() => setEditData((prev) => ({ ...prev, visibilite: 'private' }))}
                 >
-                  <Text style={[styles.statutBtnText, editData.visibilite === 'private' && styles.statutBtnTextActive]}>🔒 Privé</Text>
+                  <Text style={[styles.statutBtnText, editData.visibilite === 'private' && styles.statutBtnTextActive]}>{t("🔒 Privé")}</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>Commentaire</Text>
+              <Text style={styles.label}>{t("Commentaire")}</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={editData.commentaire}
                 onChangeText={(v) => setEditData((prev) => ({ ...prev, commentaire: v }))}
-                placeholder="Raconte ton date..."
+                placeholder={t("Raconte ton date...")}
                 placeholderTextColor="#B8A9A0"
                 multiline
                 numberOfLines={4}
@@ -971,7 +970,7 @@ export default function Profile() {
 
               {companions.length > 0 && (
                 <>
-                  <Text style={styles.label}>Avec qui ? <Text style={styles.labelOptional}>(optionnel)</Text></Text>
+                  <Text style={styles.label}>{t("Avec qui ?")} <Text style={styles.labelOptional}>{t("(optionnel)")}</Text></Text>
                   <View style={styles.categoryRow}>
                     {companions.map((c) => (
                       <TouchableOpacity
@@ -988,7 +987,7 @@ export default function Profile() {
                 </>
               )}
 
-              <Text style={styles.label}>Photos ({editPhotoCount}/{MAX_PHOTOS})</Text>
+              <Text style={styles.label}>{t("Photos")} ({editPhotoCount}/{MAX_PHOTOS})</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoGallery}>
                 {editData.keptPhotoUrls.map((url) => (
                   <View key={url} style={styles.photoThumbWrapper}>
@@ -1020,7 +1019,7 @@ export default function Profile() {
             <View style={styles.uploadOverlay}>
               <View style={styles.uploadCard}>
                 <ActivityIndicator color="#D4517E" size="large" />
-                <Text style={styles.uploadTitle}>Envoi des photos</Text>
+                <Text style={styles.uploadTitle}>{t("Envoi des photos")}</Text>
                 <Text style={styles.uploadCount}>{uploadProgress.current} / {uploadProgress.total}</Text>
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { flex: uploadProgress.current }]} />
@@ -1037,7 +1036,7 @@ export default function Profile() {
       <Modal visible={planifieModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPlanifieModalVisible(false)}>
         <SafeAreaView style={styles.modalSafe} edges={['top']}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Dates planifiés</Text>
+            <Text style={styles.modalTitle}>{t("Dates planifiés")}</Text>
             <TouchableOpacity onPress={() => setPlanifieModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close" size={24} color="#5C4A45" />
             </TouchableOpacity>
@@ -1066,8 +1065,8 @@ const styles = StyleSheet.create({
   avatarInfo: { flex: 1 },
   email: { fontSize: 13, color: '#888', marginTop: 1 },
   username: { fontSize: 16, fontWeight: '700', color: '#D4517E' },
-  quickLinks: { marginBottom: 16, marginTop: 12, minWidth: 0 },
-  quickLink: { alignItems: 'center', gap: 4, backgroundColor: '#FDE8F0', width: 72, paddingVertical: 10, borderRadius: 14 },
+  quickLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8, marginBottom: 16, marginTop: 12 },
+  quickLink: { alignItems: 'center', gap: 4, backgroundColor: '#FDE8F0', width: '19%', paddingVertical: 10, paddingHorizontal: 2, borderRadius: 14 },
   quickLinkText: { color: '#D4517E', fontSize: 11, fontWeight: '600', textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#F0D9D9' },
@@ -1095,6 +1094,12 @@ const styles = StyleSheet.create({
   calClear: { alignItems: 'center', paddingTop: 8 },
   calClearText: { fontSize: 12, color: '#B8A9A0' },
   empty: { color: '#888', textAlign: 'center', marginTop: 20 },
+  emptyBox: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 24, marginTop: 8, borderWidth: 1, borderColor: '#F0D9D9' },
+  emptyIcon: { fontSize: 36, marginBottom: 8 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
+  emptySub: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 16, textAlign: 'center' },
+  emptyCta: { backgroundColor: '#D4517E', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   dateCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#F0D9D9' },
   conseilBadge: { backgroundColor: '#FDE8F0', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10, marginBottom: 8, alignSelf: 'flex-start' },
   conseilBadgeText: { fontSize: 11, fontWeight: '700', color: '#D4517E' },

@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Modal, SafeAreaView } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { formaterDate } from './dateUtils'
-
-const CAL_DOW = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
-const CAL_MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+import { formaterDate, nomsDesMois, initialesJours } from './dateUtils'
+import { t } from './i18n'
 
 type Props = {
   value: string | null
@@ -22,8 +20,15 @@ function toIso(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-export function DatePicker({ value, onChange, placeholder = 'Choisir une date' }: Props) {
+const YEARS_PER_PAGE = 12
+
+export function DatePicker({ value, onChange, placeholder }: Props) {
+  const CAL_DOW = initialesJours()
+  const CAL_MOIS = nomsDesMois('long')
+  const CAL_MOIS_COURT = nomsDesMois('court')
   const [visible, setVisible] = useState(false)
+  // 'days' = grille du mois ; 'months'/'years' = sélection rapide en touchant l'en-tête
+  const [mode, setMode] = useState<'days' | 'months' | 'years'>('days')
   const parsed = parseIso(value)
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date()
@@ -33,10 +38,19 @@ export function DatePicker({ value, onChange, placeholder = 'Choisir une date' }
   function openPicker() {
     const now = new Date()
     setViewMonth(parsed ? { year: parsed.year, month: parsed.month } : { year: now.getFullYear(), month: now.getMonth() })
+    setMode('days')
     setVisible(true)
   }
 
   function changeMonth(delta: number) {
+    if (mode === 'years') {
+      setViewMonth((prev) => ({ ...prev, year: prev.year + delta * YEARS_PER_PAGE }))
+      return
+    }
+    if (mode === 'months') {
+      setViewMonth((prev) => ({ ...prev, year: prev.year + delta }))
+      return
+    }
     setViewMonth((prev) => {
       let month = prev.month + delta
       let year = prev.year
@@ -60,12 +74,17 @@ export function DatePicker({ value, onChange, placeholder = 'Choisir une date' }
     return arr
   }, [viewMonth])
 
+  const yearPageStart = viewMonth.year - (((viewMonth.year % YEARS_PER_PAGE) + YEARS_PER_PAGE) % YEARS_PER_PAGE)
+  const headerLabel = mode === 'years'
+    ? `${yearPageStart} – ${yearPageStart + YEARS_PER_PAGE - 1}`
+    : mode === 'months' ? String(viewMonth.year) : `${CAL_MOIS[viewMonth.month]} ${viewMonth.year}`
+
   return (
     <>
       <TouchableOpacity style={styles.field} onPress={openPicker} activeOpacity={0.8}>
         <Ionicons name="calendar-outline" size={18} color="#B8A9A0" />
         <Text style={value ? styles.fieldValue : styles.fieldPlaceholder}>
-          {value ? formaterDate(value) : placeholder}
+          {value ? formaterDate(value) : placeholder ?? t("Choisir une date")}
         </Text>
       </TouchableOpacity>
 
@@ -77,12 +96,49 @@ export function DatePicker({ value, onChange, placeholder = 'Choisir une date' }
                 <TouchableOpacity onPress={() => changeMonth(-1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="chevron-back" size={20} color="#D4517E" />
                 </TouchableOpacity>
-                <Text style={styles.headerLabel}>{CAL_MOIS[viewMonth.month]} {viewMonth.year}</Text>
+                <TouchableOpacity
+                  style={styles.headerLabelBtn}
+                  onPress={() => setMode(mode === 'days' ? 'months' : mode === 'months' ? 'years' : 'days')}
+                  accessibilityLabel={t("Changer de mois ou d'année")}
+                >
+                  <Text style={styles.headerLabel}>{headerLabel}</Text>
+                  <Ionicons name={mode === 'days' ? 'chevron-down' : 'chevron-up'} size={14} color="#D4517E" />
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => changeMonth(1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name="chevron-forward" size={20} color="#D4517E" />
                 </TouchableOpacity>
               </View>
 
+              {mode === 'years' && (
+                <View style={styles.pickGrid}>
+                  {Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearPageStart + i).map((y) => (
+                    <TouchableOpacity
+                      key={y}
+                      style={[styles.pickCell, y === viewMonth.year && styles.dayCellSelected]}
+                      onPress={() => { setViewMonth((p) => ({ ...p, year: y })); setMode('months') }}
+                    >
+                      <Text style={[styles.dayText, y === viewMonth.year && styles.dayTextSelected]}>{y}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {mode === 'months' && (
+                <View style={styles.pickGrid}>
+                  {CAL_MOIS_COURT.map((m, i) => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.pickCell, i === viewMonth.month && styles.dayCellSelected]}
+                      onPress={() => { setViewMonth((p) => ({ ...p, month: i })); setMode('days') }}
+                    >
+                      <Text style={[styles.dayText, i === viewMonth.month && styles.dayTextSelected]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {mode === 'days' && (
+              <>
               <View style={styles.dowRow}>
                 {CAL_DOW.map((d, i) => <Text key={i} style={styles.dow}>{d}</Text>)}
               </View>
@@ -104,13 +160,15 @@ export function DatePicker({ value, onChange, placeholder = 'Choisir une date' }
                   )
                 })}
               </View>
+              </>
+              )}
 
               <TouchableOpacity style={styles.todayBtn} onPress={() => {
                 const now = new Date()
                 onChange(toIso(now.getFullYear(), now.getMonth(), now.getDate()))
                 setVisible(false)
               }}>
-                <Text style={styles.todayBtnText}>Aujourd'hui</Text>
+                <Text style={styles.todayBtnText}>{t("Aujourd'hui")}</Text>
               </TouchableOpacity>
             </SafeAreaView>
           </TouchableOpacity>
@@ -127,7 +185,10 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   sheet: { backgroundColor: '#fff', borderRadius: 20, padding: 16, width: '100%', maxWidth: 340 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 },
+  headerLabelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#FDE8F0' },
   headerLabel: { fontSize: 15, fontWeight: '700', color: '#5C4A45' },
+  pickGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 4 },
+  pickCell: { width: '33.333%', paddingVertical: 14, alignItems: 'center', borderRadius: 10 },
   dowRow: { flexDirection: 'row', marginBottom: 4 },
   dow: { flex: 1, textAlign: 'center', fontSize: 12, color: '#B8A9A0', fontWeight: '600' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },

@@ -80,23 +80,25 @@ Deno.serve(async (req) => {
 
   if (targets.size === 0) return json({ ok: true })
 
-  const { data: profiles } = await supabase.from('profiles').select('id, expo_push_token').in('id', [...targets.keys()])
+  // select('*') : la colonne « langue » peut ne pas exister tant que la migration n'est pas passée (→ français)
+  const { data: profiles } = await supabase.from('profiles').select('*').in('id', [...targets.keys()])
 
   for (const p of profiles ?? []) {
     if (!p.expo_push_token) continue
     const type = targets.get(p.id)!
+    const en = (p as any).langue === 'en'
     const title = type === 'mention'
-      ? `📣 @${senderUsername} t'a mentionné`
+      ? (en ? `📣 @${senderUsername} mentioned you` : `📣 @${senderUsername} t'a mentionné`)
       : type === 'reply'
-      ? `↩️ @${senderUsername} a répondu à ton commentaire`
-      : `💬 @${senderUsername} a commenté`
+      ? (en ? `↩️ @${senderUsername} replied to your comment` : `↩️ @${senderUsername} a répondu à ton commentaire`)
+      : (en ? `💬 @${senderUsername} commented` : `💬 @${senderUsername} a commenté`)
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: p.expo_push_token,
         title,
-        body: preview || `Sur "${dateLabel}"`,
+        body: preview || (en ? `On "${dateLabel}"` : `Sur "${dateLabel}"`),
         sound: 'default',
       }),
     })

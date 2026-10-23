@@ -1,156 +1,254 @@
-import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native'
+import { useRef, useState } from 'react'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import { Link, useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { usernameValide } from '../../lib/friendsUtils'
-import { webFormStyle, webAuthCardStyle } from '../../lib/webStyles'
-import { DatePicker } from '../../lib/DatePicker'
+import { BirthdateField } from '../../lib/BirthdateField'
+import { FormField } from '../../lib/FormField'
+import { AuthScreen, authStyles } from '../../lib/AuthScreen'
+import { useUsernameCheck } from '../../lib/useUsernameCheck'
+import { MIN_AGE, MIN_PASSWORD_LENGTH, computeAge, emailValide, traduireErreurAuth } from '../../lib/authErrors'
+import { t } from '../../lib/i18n'
 
-const MIN_AGE = 16
-
-function computeAge(birthdateIso: string): number {
-  const [y, m, d] = birthdateIso.split('-').map(Number)
-  const today = new Date()
-  let age = today.getFullYear() - y
-  const hasHadBirthdayThisYear = today.getMonth() + 1 > m || (today.getMonth() + 1 === m && today.getDate() >= d)
-  if (!hasHadBirthdayThisYear) age--
-  return age
-}
+type Errors = Partial<Record<'email' | 'password' | 'username' | 'birthdate' | 'terms', string>>
 
 export default function Signup() {
-  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
   const [dateNaissance, setDateNaissance] = useState<string | null>(null)
-  const [error, setError] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmationSentTo, setConfirmationSentTo] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
   const router = useRouter()
+  const passwordRef = useRef<TextInput>(null)
+  const usernameRef = useRef<TextInput>(null)
+  const usernameCheck = useUsernameCheck(username)
+
+  function validate(): Errors {
+    const errors: Errors = {}
+    if (!email.trim()) errors.email = t("Indique ton email")
+    else if (!emailValide(email)) errors.email = t("Cette adresse email n'est pas valide")
+    if (password.length < MIN_PASSWORD_LENGTH) errors.password = t("Au moins {n} caractères", { n: MIN_PASSWORD_LENGTH })
+    const u = usernameValide(username)
+    if (!u.valide) errors.username = u.message
+    else if (usernameCheck.status === 'taken') errors.username = usernameCheck.message
+    if (!dateNaissance) errors.birthdate = t("Indique ta date de naissance complète")
+    else if (computeAge(dateNaissance) < MIN_AGE) errors.birthdate = t("Tu dois avoir au moins {n} ans pour utiliser Dateo", { n: MIN_AGE })
+    if (!termsAccepted) errors.terms = t("Tu dois accepter les conditions pour continuer")
+    return errors
+  }
+
+  // Les erreurs ne s'affichent qu'après une première tentative, puis se mettent à jour en direct
+  const errors = submitted ? validate() : {}
 
   async function handleSignup() {
-    setError('')
-
-    const validation = usernameValide(username)
-    if (!validation.valide) {
-      setError(validation.message ?? 'Pseudo invalide')
-      return
-    }
-
-    if (!dateNaissance) {
-      setError('Indique ta date de naissance')
-      return
-    }
-    if (computeAge(dateNaissance) < MIN_AGE) {
-      setError(`Tu dois avoir au moins ${MIN_AGE} ans pour utiliser Dateo`)
-      return
-    }
+    setSubmitted(true)
+    setFormError('')
+    if (Object.keys(validate()).length > 0 || saving) return
 
     setSaving(true)
+    const trimmedUsername = username.trim()
+    const termsAcceptedAt = new Date().toISOString()
 
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username.trim())
-      .maybeSingle()
-
-    if (existing) {
-      setSaving(false)
-      setError('Ce pseudo est déjà pris')
-      return
-    }
-
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        // Conservés côté auth pour pouvoir compléter le profil après confirmation de l'email
+        data: { username: trimmedUsername, date_naissance: dateNaissance, terms_accepted_at: termsAcceptedAt },
+        emailRedirectTo: Platform.OS === 'web' ? window.location.origin : undefined,
+      },
+    })
 
     if (signUpError) {
       setSaving(false)
-      setError(signUpError.message)
+      setFormError(traduireErreurAuth(signUpError.message))
       return
     }
 
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ username: username.trim(), date_naissance: dateNaissance })
-        .eq('id', data.user.id)
-
+    // Email déjà utilisé avec confirmation activée : Supabase ne renvoie pas d'erreur
+    // mais un utilisateur sans identité.
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
       setSaving(false)
-
-      if (profileError) {
-        // Le compte est déjà créé : on redirige vers l'écran dédié pour retenter le pseudo
-        // plutôt que de laisser l'utilisateur bloqué sur un message d'erreur sans issue.
-        router.replace('/(auth)/username')
-        return
-      }
-    } else {
-      setSaving(false)
+      setFormError(t("Un compte existe déjà avec cet email. Connecte-toi plutôt."))
+      return
     }
 
-    router.replace('/(tabs)/feed')
+    if (!data.session) {
+      setSaving(false)
+      setConfirmationSentTo(email.trim())
+      return
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ username: trimmedUsername, date_naissance: dateNaissance, terms_accepted_at: termsAcceptedAt })
+      .eq('id', data.session.user.id)
+
+    setSaving(false)
+
+    if (profileError) {
+      // Compte créé mais pseudo refusé (pris entre-temps) : on enregistre le reste et on
+      // laisse l'utilisateur en choisir un autre plutôt que de le bloquer.
+      await supabase.from('profiles')
+        .update({ date_naissance: dateNaissance, terms_accepted_at: termsAcceptedAt })
+        .eq('id', data.session.user.id)
+      router.replace('/(auth)/username')
+      return
+    }
+
+    router.replace('/onboarding')
   }
 
-  return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.outer}>
-        <View style={[styles.form, webFormStyle, webAuthCardStyle]}>
-          <Image source={require('../../assets/logoVertical.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.subtitle}>Crée ton compte</Text>
+  async function resendConfirmation() {
+    if (!confirmationSentTo) return
+    setResending(true)
+    setResendMsg('')
+    const { error } = await supabase.auth.resend({ type: 'signup', email: confirmationSentTo })
+    setResending(false)
+    setResendMsg(error ? traduireErreurAuth(error.message) : t("Email renvoyé !"))
+  }
 
-          <TextInput
-            style={styles.input}
-            placeholder="Pseudo"
-            placeholderTextColor="#B8A9A0"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#B8A9A0"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor="#B8A9A0"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-          <View style={styles.datePickerWrap}>
-            <DatePicker value={dateNaissance} onChange={setDateNaissance} placeholder="Date de naissance" />
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={saving}>
-            {saving
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>S'inscrire</Text>
-            }
-          </TouchableOpacity>
-
-          <Link href="/(auth)/login" style={styles.link}>
-            <Text>Déjà un compte ? Connecte-toi</Text>
-          </Link>
+  if (confirmationSentTo) {
+    return (
+      <AuthScreen title={t("Vérifie ta boîte mail")} subtitle={t("On a envoyé un lien de confirmation à {email}. Clique dessus puis reviens te connecter.", { email: confirmationSentTo })}>
+        <View style={styles.mailIconWrap}>
+          <Ionicons name="mail-unread-outline" size={56} color="#D4517E" />
         </View>
+        {resendMsg ? (
+          <Text style={resendMsg === t("Email renvoyé !") ? authStyles.formSuccess : authStyles.formError}>{resendMsg}</Text>
+        ) : null}
+        <TouchableOpacity style={authStyles.button} onPress={() => router.replace('/(auth)/login')}>
+          <Text style={authStyles.buttonText}>{t("J'ai confirmé, me connecter")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textBtn} onPress={resendConfirmation} disabled={resending}>
+          <Text style={styles.textBtnLabel}>{resending ? t("Envoi…") : t("Je n'ai rien reçu, renvoyer l'email")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.textBtn} onPress={() => { setConfirmationSentTo(null); setResendMsg('') }}>
+          <Text style={styles.textBtnMuted}>{t("Modifier mon adresse email")}</Text>
+        </TouchableOpacity>
+      </AuthScreen>
+    )
+  }
+
+  const usernameHint =
+    usernameCheck.status === 'checking' ? t("Vérification…")
+    : usernameCheck.status === 'available' ? t("✓ Pseudo disponible")
+    : t("Lettres, chiffres, points et _ — visible par tes amis")
+  const usernameInlineError = errors.username ?? (usernameCheck.status === 'taken' || (usernameCheck.status === 'invalid' && username.trim().length >= 3) ? usernameCheck.message : undefined)
+
+  return (
+    <AuthScreen title={t("Crée ton compte")} subtitle={t("Garde une trace de tous tes dates et partage-les avec tes amis")}>
+      <FormField
+        label={t("Email")}
+        placeholder={t("toi@exemple.com")}
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
+        error={errors.email}
+      />
+      <FormField
+        ref={passwordRef}
+        label={t("Mot de passe")}
+        placeholder={t("{n} caractères minimum", { n: MIN_PASSWORD_LENGTH })}
+        value={password}
+        onChangeText={setPassword}
+        password
+        autoCapitalize="none"
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="next"
+        onSubmitEditing={() => usernameRef.current?.focus()}
+        error={errors.password}
+        hint={password.length > 0 && password.length < MIN_PASSWORD_LENGTH ? t("Encore {n} caractère(s)", { n: MIN_PASSWORD_LENGTH - password.length }) : undefined}
+      />
+      <FormField
+        ref={usernameRef}
+        label={t("Pseudo")}
+        placeholder={t("ex : clervie.d")}
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="username"
+        textContentType="username"
+        returnKeyType="done"
+        error={usernameInlineError}
+        hint={usernameHint}
+        right={usernameCheck.status === 'checking'
+          ? <ActivityIndicator size="small" color="#D4517E" />
+          : usernameCheck.status === 'available'
+            ? <Ionicons name="checkmark-circle" size={20} color="#3B6D11" />
+            : null}
+      />
+
+      <View style={styles.birthWrap}>
+        <Text style={styles.label}>{t("Date de naissance")}</Text>
+        <BirthdateField value={dateNaissance} onChange={setDateNaissance} minAge={MIN_AGE} maxAge={100} hasError={!!errors.birthdate} />
+        {errors.birthdate
+          ? <Text style={styles.fieldError}>{errors.birthdate}</Text>
+          : <Text style={styles.hint}>{t("Dateo est réservé aux {n} ans et plus. Elle n'est pas affichée sur ton profil.", { n: MIN_AGE })}</Text>}
       </View>
-    </KeyboardAvoidingView>
+
+      <TouchableOpacity
+        style={styles.termsRow}
+        onPress={() => setTermsAccepted((v) => !v)}
+        activeOpacity={0.8}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: termsAccepted }}
+      >
+        <Ionicons
+          name={termsAccepted ? 'checkbox' : 'square-outline'}
+          size={22}
+          color={errors.terms ? '#D85A30' : termsAccepted ? '#D4517E' : '#B8A9A0'}
+        />
+        <Text style={styles.termsText}>
+          {t("J'accepte les")}{' '}
+          <Text style={styles.termsLink} onPress={() => router.push('/terms')}>{t("conditions d'utilisation")}</Text>
+          {' '}{t("et la")}{' '}
+          <Text style={styles.termsLink} onPress={() => router.push('/privacy')}>{t("politique de confidentialité")}</Text>
+        </Text>
+      </TouchableOpacity>
+      {errors.terms ? <Text style={[styles.fieldError, { marginTop: -6, marginBottom: 10 }]}>{errors.terms}</Text> : null}
+
+      {formError ? <Text style={authStyles.formError}>{formError}</Text> : null}
+
+      <TouchableOpacity style={[authStyles.button, saving && authStyles.buttonDisabled]} onPress={handleSignup} disabled={saving}>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Créer mon compte")}</Text>}
+      </TouchableOpacity>
+
+      <View style={authStyles.secondaryLinkRow}>
+        <Text style={authStyles.secondaryText}>{t("Déjà un compte ?")} </Text>
+        <Link href="/(auth)/login" replace>
+          <Text style={authStyles.secondaryLink}>{t("Connecte-toi")}</Text>
+        </Link>
+      </View>
+    </AuthScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  outer: { flex: 1, justifyContent: 'center', backgroundColor: '#FFF8F5' },
-  form: { padding: 24 },
-  logo: { height: 140, width: 118, maxWidth: '100%', alignSelf: 'center', marginBottom: 8 },
-  title: { fontSize: 32, fontWeight: '600', color: '#D4517E', textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
-  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  datePickerWrap: { marginBottom: 12 },
-  button: { backgroundColor: '#D4517E', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  link: { marginTop: 20, alignSelf: 'center' },
-  error: { color: '#D85A30', textAlign: 'center', marginBottom: 8 },
+  birthWrap: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: '#5C4A45', marginBottom: 6 },
+  hint: { color: '#888', fontSize: 12, marginTop: 4 },
+  fieldError: { color: '#D85A30', fontSize: 12, marginTop: 4 },
+  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
+  termsText: { flex: 1, fontSize: 13, color: '#5C4A45', lineHeight: 20 },
+  termsLink: { color: '#D4517E', fontWeight: '600', textDecorationLine: 'underline' },
+  mailIconWrap: { alignItems: 'center', marginBottom: 20 },
+  textBtn: { alignItems: 'center', padding: 12, marginTop: 4 },
+  textBtnLabel: { color: '#D4517E', fontWeight: '600', fontSize: 14 },
+  textBtnMuted: { color: '#888', fontSize: 13 },
 })

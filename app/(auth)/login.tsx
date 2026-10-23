@@ -1,104 +1,127 @@
-import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native'
+import { useRef, useState } from 'react'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import { Link } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { webFormStyle, webAuthCardStyle } from '../../lib/webStyles'
+import { FormField } from '../../lib/FormField'
+import { AuthScreen, authStyles } from '../../lib/AuthScreen'
+import { emailValide, traduireErreurAuth } from '../../lib/authErrors'
+import { t } from '../../lib/i18n'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [resetSent, setResetSent] = useState(false)
+  const [info, setInfo] = useState('')
   const [sendingReset, setSendingReset] = useState(false)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const passwordRef = useRef<TextInput>(null)
 
   async function handleLogin() {
     setError('')
+    setInfo('')
+    setEmailError('')
+    setNeedsConfirmation(false)
+    if (!emailValide(email)) { setEmailError(t("Cette adresse email n'est pas valide")); return }
+    if (!password) { setError(t("Indique ton mot de passe")); return }
+
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError(error.message)
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setLoading(false)
-    // Navigation handled by _layout.tsx after session change
+    if (error) {
+      setError(traduireErreurAuth(error.message))
+      setNeedsConfirmation(error.message.toLowerCase().includes('email not confirmed'))
+    }
+    // Navigation gérée par _layout.tsx après le changement de session
   }
 
   async function handleForgotPassword() {
     setError('')
-    if (!email.trim()) {
-      setError('Renseigne ton email ci-dessus puis appuie sur "Mot de passe oublié"')
+    setInfo('')
+    if (!emailValide(email)) {
+      setEmailError(t("Renseigne ton email ici, puis appuie à nouveau sur « Mot de passe oublié »"))
       return
     }
+    setEmailError('')
     setSendingReset(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim())
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: Platform.OS === 'web' ? `${window.location.origin}/reset-password` : undefined,
+    })
     setSendingReset(false)
-    if (error) setError(error.message)
-    else setResetSent(true)
+    if (error) setError(traduireErreurAuth(error.message))
+    else setInfo(t("Si un compte existe pour {email}, tu vas recevoir un lien pour choisir un nouveau mot de passe.", { email: email.trim() }))
+  }
+
+  async function resendConfirmation() {
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim() })
+    if (error) setError(traduireErreurAuth(error.message))
+    else { setError(''); setNeedsConfirmation(false); setInfo(t("Email de confirmation renvoyé ! Vérifie ta boîte mail.")) }
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.outer}>
-        <View style={[styles.form, webFormStyle, webAuthCardStyle]}>
-          <Image source={require('../../assets/logoVertical.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.subtitle}>Connecte-toi pour continuer</Text>
+    <AuthScreen title={t("Bon retour 👋")} subtitle={t("Connecte-toi pour retrouver tes dates")}>
+      <FormField
+        label={t("Email")}
+        placeholder={t("toi@exemple.com")}
+        value={email}
+        onChangeText={(v) => { setEmail(v); setEmailError('') }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
+        error={emailError}
+      />
+      <FormField
+        ref={passwordRef}
+        label={t("Mot de passe")}
+        placeholder={t("Ton mot de passe")}
+        value={password}
+        onChangeText={setPassword}
+        password
+        autoCapitalize="none"
+        autoComplete="current-password"
+        textContentType="password"
+        returnKeyType="go"
+        onSubmitEditing={handleLogin}
+      />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#B8A9A0"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor="#B8A9A0"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+      <TouchableOpacity onPress={handleForgotPassword} disabled={sendingReset} style={styles.forgotLink}>
+        <Text style={styles.forgotText}>{sendingReset ? t("Envoi…") : t("Mot de passe oublié ?")}</Text>
+      </TouchableOpacity>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {resetSent ? <Text style={styles.success}>Email envoyé ! Vérifie ta boîte mail.</Text> : null}
+      {error ? <Text style={authStyles.formError}>{error}</Text> : null}
+      {needsConfirmation ? (
+        <TouchableOpacity onPress={resendConfirmation} style={styles.resendBtn}>
+          <Text style={styles.forgotText}>{t("Renvoyer l'email de confirmation")}</Text>
+        </TouchableOpacity>
+      ) : null}
+      {info ? <Text style={authStyles.formSuccess}>{info}</Text> : null}
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.buttonText}>Se connecter</Text>
-            }
-          </TouchableOpacity>
+      <TouchableOpacity style={[authStyles.button, loading && authStyles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={authStyles.buttonText}>{t("Se connecter")}</Text>}
+      </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleForgotPassword} disabled={sendingReset} style={styles.forgotLink}>
-            <Text style={styles.forgotText}>{sendingReset ? 'Envoi...' : 'Mot de passe oublié ?'}</Text>
-          </TouchableOpacity>
-
-          <Link href="/(auth)/signup" style={styles.link}>
-            <Text>Pas encore de compte ? Inscris-toi</Text>
-          </Link>
-
-          <Link href="/delete-account-info" style={styles.deleteLink}>
-            <Text>Supprimer mon compte</Text>
-          </Link>
-        </View>
+      <View style={authStyles.secondaryLinkRow}>
+        <Text style={authStyles.secondaryText}>{t("Pas encore de compte ?")} </Text>
+        <Link href="/(auth)/signup" replace>
+          <Text style={authStyles.secondaryLink}>{t("Inscris-toi")}</Text>
+        </Link>
       </View>
-    </KeyboardAvoidingView>
+
+      <Link href="/delete-account-info" style={styles.deleteLink}>
+        <Text>{t("Supprimer mon compte")}</Text>
+      </Link>
+    </AuthScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  outer: { flex: 1, justifyContent: 'center', backgroundColor: '#FFF8F5' },
-  form: { padding: 24 },
-  logo: { height: 140, width: 118, maxWidth: '100%', alignSelf: 'center', marginBottom: 8 },
-  title: { fontSize: 32, fontWeight: '600', color: '#D4517E', textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 32 },
-  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#F0D9D9' },
-  button: { backgroundColor: '#D4517E', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  link: { marginTop: 20, alignSelf: 'center' },
-  error: { color: '#D85A30', textAlign: 'center', marginBottom: 8 },
-  success: { color: '#3B6D11', textAlign: 'center', marginBottom: 8 },
-  forgotLink: { alignSelf: 'center', marginTop: 14 },
-  forgotText: { color: '#D4517E', fontSize: 13, fontWeight: '500' },
-  deleteLink: { alignSelf: 'center', marginTop: 18, color: '#B8A9A0', fontSize: 12 },
+  forgotLink: { alignSelf: 'flex-end', marginTop: -6, marginBottom: 14, paddingVertical: 4 },
+  forgotText: { color: '#D4517E', fontSize: 13, fontWeight: '600' },
+  resendBtn: { alignSelf: 'center', marginBottom: 12, padding: 4 },
+  deleteLink: { alignSelf: 'center', marginTop: 28, color: '#B8A9A0', fontSize: 12 },
 })
